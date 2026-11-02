@@ -13,7 +13,7 @@ Folder [Izvori/](Izvori/) sadrži naučne radove, linkove i ostale dokumente pro
   - *Hydraulic Erosion* (Beneš et al., CAVW 2006): 3D (voxel/Navier–Stokes) pristup eroziji.
   - *Hydraulic Erosion Using Smoothed Particle Hydrodynamics* (Krištof et al., Eurographics 2009): čestični (SPH) pristup.
 - **[Zasto Shallow-Water/](Izvori/Zasto%20Shallow-Water/)**: radovi koji su osnova za izabrani model.
-  - *Fast Hydraulic Erosion Simulation and Visualization on GPU* (Mei, Decaudin, Hu, PG 2007): **osnova algoritma** (virtual pipe model + erozija/depozicija). PDF treba ručno preuzeti, vidi [linkovi-implementacije.md](Izvori/linkovi-implementacije.md).
+  - *Fast Hydraulic Erosion Simulation and Visualization on GPU* (Mei, Decaudin, Hu, PG 2007): **osnova algoritma** (virtual pipe model + erozija/depozicija).
   - *Interactive Terrain Modeling Using Hydraulic Erosion* (Šťava et al., SCA 2008): proširenje na više slojeva materijala, odronjavanje obala i podjelu na blokove (tiling).
   - *A Second-Order Well-Balanced Positivity Preserving Central-Upwind Scheme for the Saint-Venant System* (Kurganov, Petrova 2007): numerički tačnija shema za shallow-water jednačine, kao poređenje s pipe modelom.
 - **[Paralelizacije/](Izvori/Paralelizacije/)**: paralelne (GPU/CPU) implementacije shallow-water i erozije.
