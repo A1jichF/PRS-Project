@@ -21,7 +21,7 @@ Folder [Izvori/](Izvori/) sadrži naučne radove, linkove i ostale dokumente pro
   - *Fast Hydraulic and Thermal Erosion on the GPU* (Jákó, CESCG 2011)
   - *3D Real-Time Hydraulic Erosion Simulation using Multi-Layered Heightmaps* (Nilles et al., VMV 2024)
   - Šira referenca (PDF ručno): *Efficient Shallow Water Simulations on GPUs* (Brodtkorb, Sætra, Altinakar 2012) i *TRITON: A Multi-GPU Open Source 2D Hydrodynamic Flood Model* (Morales-Hernández et al. 2021).
-- **[linkovi-implementacije.md](Izvori/linkovi-implementacije.md)**: GitHub repozitoriji sa implementacijama, te linkovi za radove koje treba ručno preuzeti.
+- **[linkovi-implementacije.md](Izvori/linkovi-implementacije.md)**: GitHub repozitoriji sa implementacijama i ostali korisni linkovi.
 
 ## Početni plan implementacije
 

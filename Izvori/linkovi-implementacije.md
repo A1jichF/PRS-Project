@@ -17,13 +17,6 @@ Sva tri implementiraju **virtual pipe** shallow-water model iz rada Mei et al. 2
 - [Huw-man/Interactive-Erosion-Simulator-on-GPU](https://github.com/Huw-man/Interactive-Erosion-Simulator-on-GPU): C++ GPU simulator erozije.
 - [TRITON (ORNL)](https://code.ornl.gov/hydro/triton): profesionalni multi-GPU/multi-CPU 2D shallow-water solver (C++, MPI, OpenMP, CUDA). Referenca za paralelizaciju, nije za eroziju.
 
-## Radovi koje treba ručno preuzeti
-
-HAL i izdavači blokiraju automatsko preuzimanje, pa ove PDF-ove treba skinuti ručno (preko Google Scholar ili fakultetskog pristupa) i staviti u odgovarajući folder:
-
-- **Brodtkorb, Sætra, Altinakar: *Efficient shallow water simulations on GPUs: Implementation, visualization, verification, and validation*** (Computers & Fluids 55, 2012). DOI: [10.1016/j.compfluid.2011.10.012](https://doi.org/10.1016/j.compfluid.2011.10.012) → `Izvori/Paralelizacije/`
-- **Morales-Hernández et al.: *TRITON: A Multi-GPU open source 2D hydrodynamic flood model*** (Environmental Modelling & Software 141, 2021). DOI: [10.1016/j.envsoft.2021.105034](https://doi.org/10.1016/j.envsoft.2021.105034) → `Izvori/Paralelizacije/`
-
 ## Ostalo
 
 - Google Scholar pretraga: https://scholar.google.com/scholar?q=shallow+water+hydraulic+erosion+GPU
