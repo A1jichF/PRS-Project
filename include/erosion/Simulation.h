@@ -61,6 +61,8 @@ public:
     void resetTimings() { m_timings = {}; }
 
 private:
+    void allocateScratch();
+
     Grid                     m_grid;
     Params                   m_params;
     Field                    m_bScratch; ///< Drugi bafer terena za erodeDeposit

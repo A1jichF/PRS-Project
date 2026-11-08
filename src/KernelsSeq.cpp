@@ -6,6 +6,10 @@
 #include <cmath>
 #include <utility>
 
+// Napomena o performansama: parametri iz `Params` se kopiraju u lokalne
+// konstante PRIJE petlji. Params sadrži float-ove, a petlje pišu u float nizove,
+// pa bi kompajler inače morao pretpostaviti da upis u niz može promijeniti p.dt
+// i čitati ga ponovo u svakoj iteraciji (smeta i kasnijoj vektorizaciji).
 namespace erosion::seq {
 
 void addWater(Grid& g, const Params& p, std::span<const WaterSource> sources)
@@ -42,6 +46,7 @@ void computeFlux(Grid& g, const Params& p)
     const float  l        = g.cellSize;
     const float  cellArea = l * l;
     const float  k        = p.dt * p.pipeArea * p.gravity / l;
+    const float  dt       = p.dt;
     const float* b        = g.b.data();
     const float* d        = g.d.data();
     float*       fL       = g.fL.data();
@@ -64,7 +69,7 @@ void computeFlux(Grid& g, const Params& p)
             // Ćelija ne smije poslati više vode nego što ima: Σf * dt <= d * l².
             const float sum = l_ + r_ + t_ + b_;
             if (sum > 0.0f) {
-                const float K = std::min(1.0f, d[i] * cellArea / (sum * p.dt));
+                const float K = std::min(1.0f, d[i] * cellArea / (sum * dt));
                 l_ *= K;
                 r_ *= K;
                 t_ *= K;
@@ -85,6 +90,8 @@ void updateWaterAndVelocity(Grid& g, const Params& p)
     const int    H           = g.height;
     const float  l           = g.cellSize;
     const float  invCellArea = 1.0f / (l * l);
+    const float  dt          = p.dt;
+    const float  minDepth    = p.minDepthForVelocity;
     const float* fL          = g.fL.data();
     const float* fR          = g.fR.data();
     const float* fT          = g.fT.data();
@@ -109,7 +116,7 @@ void updateWaterAndVelocity(Grid& g, const Params& p)
             const float d1 = d[i];
             // K-skaliranje garantuje d2 >= 0 u egzaktnoj aritmetici; max uklanja
             // samo grešku zaokruživanja reda 1e-7.
-            const float d2 = std::max(0.0f, d1 + p.dt * (inflow - outflow) * invCellArea);
+            const float d2 = std::max(0.0f, d1 + dt * (inflow - outflow) * invCellArea);
             d[i] = d2;
 
             // Prosječan protok kroz ćeliju po x i y (Mei et al., jednačine 8–9).
@@ -117,14 +124,12 @@ void updateWaterAndVelocity(Grid& g, const Params& p)
             const float dWY  = 0.5f * (inT - fT[i] + fB[i] - inB);
             const float dBar = 0.5f * (d1 + d2);
 
-            if (dBar > p.minDepthForVelocity) {
-                const float inv = 1.0f / (l * dBar);
-                u[i] = dWX * inv;
-                v[i] = dWY * inv;
-            } else {
-                u[i] = 0.0f;
-                v[i] = 0.0f;
-            }
+            // Bez grananja (mokra/suha ćelija je teško predvidiv uslov, a ovaj
+            // oblik se direktno prevodi u SIMD "blend"). max(...) samo sprječava
+            // dijeljenje nulom; za mokre ćelije ne mijenja rezultat.
+            const float inv = dBar > minDepth ? 1.0f / (l * std::max(dBar, minDepth)) : 0.0f;
+            u[i] = dWX * inv;
+            v[i] = dWY * inv;
         }
     }
 }
@@ -136,6 +141,8 @@ void erodeDeposit(Grid& g, const Params& p, Field& bNext)
     const float  l  = g.cellSize;
     const float  ks = std::min(1.0f, p.dissolvingRate * p.dt);
     const float  kd = std::min(1.0f, p.depositionRate * p.dt);
+    const float  minTilt  = p.minTilt;
+    const float  capacity = p.sedimentCapacity;
     const float  invMaxDepth = p.maxErosionDepth > 0.0f ? 1.0f / p.maxErosionDepth : 0.0f;
     const float* b  = g.b.data();
     const float* d  = g.d.data();
@@ -161,10 +168,10 @@ void erodeDeposit(Grid& g, const Params& p, Field& bNext)
 
             // sin α = |∇b| / sqrt(1 + |∇b|²)
             const float grad2 = gx * gx + gy * gy;
-            const float sinA  = std::max(p.minTilt, std::sqrt(grad2 / (1.0f + grad2)));
+            const float sinA  = std::max(minTilt, std::sqrt(grad2 / (1.0f + grad2)));
             const float speed = std::sqrt(u[i] * u[i] + v[i] * v[i]);
             const float lmax  = invMaxDepth > 0.0f ? std::min(1.0f, d[i] * invMaxDepth) : 1.0f;
-            const float C     = p.sedimentCapacity * sinA * speed * lmax;
+            const float C     = capacity * sinA * speed * lmax;
 
             if (C > s[i]) {
                 const float amount = ks * (C - s[i]);

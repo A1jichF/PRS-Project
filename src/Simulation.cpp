@@ -19,20 +19,26 @@ double msSince(Clock::time_point t0, Clock::time_point t1)
 Simulation::Simulation(Grid grid, Params params)
     : m_grid(std::move(grid))
     , m_params(params)
-    , m_bScratch(m_grid.cellCount(), 0.0f)
-    , m_sScratch(m_grid.cellCount(), 0.0f)
-    , m_rateScratch(m_grid.cellCount(), 0.0f)
 {
+    allocateScratch();
+}
+
+void Simulation::allocateScratch()
+{
+    // Pomoćni baferi u slotovima 9–11, različitim od polja mreže (0–8),
+    // da se ne poklope s nizovima uz koje se koriste (vidi AlignedAllocator).
+    StaggerScope stagger(9);
+    for (Field* f : {&m_bScratch, &m_sScratch, &m_rateScratch}) {
+        Field().swap(*f);
+        f->assign(m_grid.cellCount(), 0.0f);
+    }
 }
 
 void Simulation::step()
 {
     // Ako je neko promijenio dimenzije mreže preko grid(), uskladi bafere.
-    if (m_bScratch.size() != m_grid.cellCount()) {
-        m_bScratch.assign(m_grid.cellCount(), 0.0f);
-        m_sScratch.assign(m_grid.cellCount(), 0.0f);
-        m_rateScratch.assign(m_grid.cellCount(), 0.0f);
-    }
+    if (m_bScratch.size() != m_grid.cellCount())
+        allocateScratch();
 
     const bool erosion = m_params.erosionEnabled;
     const bool fluxTransport =

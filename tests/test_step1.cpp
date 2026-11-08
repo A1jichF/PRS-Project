@@ -43,6 +43,27 @@ TEST(grid_polja_su_poravnata_na_64_bajta)
         CHECK(reinterpret_cast<std::uintptr_t>(f->data()) % 64 == 0);
 }
 
+TEST(grid_polja_su_na_razlicitim_pomacima_u_stranici)
+{
+    // Zaštita od "4K aliasinga" (vidi AlignedAllocator): nijedna dva polja
+    // iste mreže ne smiju početi na istom pomaku unutar 4 KB stranice.
+    Grid g(256, 256, 2.0f);
+    const Field* fields[] = {&g.b, &g.d, &g.s, &g.fL, &g.fR, &g.fT, &g.fB, &g.u, &g.v};
+    for (std::size_t a = 0; a < 9; ++a)
+        for (std::size_t b = a + 1; b < 9; ++b) {
+            const auto pa = reinterpret_cast<std::uintptr_t>(fields[a]->data()) % 4096;
+            const auto pb = reinterpret_cast<std::uintptr_t>(fields[b]->data()) % 4096;
+            CHECK(pa != pb);
+        }
+
+    // I nakon ponovnog resize-a (npr. druga veličina) raspored je isti.
+    g.resize(100, 50, 1.0f);
+    for (std::size_t a = 0; a < 9; ++a)
+        for (std::size_t b = a + 1; b < 9; ++b)
+            CHECK(reinterpret_cast<std::uintptr_t>(fields[a]->data()) % 4096 !=
+                  reinterpret_cast<std::uintptr_t>(fields[b]->data()) % 4096);
+}
+
 TEST(grid_indeks_je_red_po_red)
 {
     Grid g(5, 4, 1.0f);

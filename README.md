@@ -84,7 +84,28 @@ powershell -ExecutionPolicy Bypass -File bench\bench_seq.ps1
 
 Skripta odbija da radi kad je laptop na bateriji. Za ručno pokretanje: `start /affinity 1 /wait /b build\erosion_cli.exe ... --csv rezultati.csv`.
 
-Mjerenja raditi s laptopom **na punjaču** i u režimu "Best performance". Na bateriji je isti kod bio oko 2× sporiji, a vremena su skakala i do 60% između pokretanja.
+Mjerenja raditi s laptopom **na punjaču** i u režimu "Best performance".
+
+### Rezultati: sekvencijalna verzija (`T_seq`)
+
+i7-1355U, CPU 0 (P-jezgro), na punjaču, Windows režim **"Best performance"**, GCC 16.2 `-O2`, scenarij `layer` + kiša 0,02 (sve faze aktivne), medijan 5 ponavljanja. Sirovi podaci: [bench/results/seq.csv](bench/results/seq.csv).
+
+| N | ms/korak | Mćelija/s | fluks | transport | voda + brzina | erozija | dodavanje + isparavanje | rasipanje |
+|---|---|---|---|---|---|---|---|---|
+| 256² | 0,94 | 69,8 | 0,19 | 0,16 | 0,15 | 0,44 | 0,01 | 2,8 % |
+| 512² | 3,54 | 74,1 | 0,76 | 0,69 | 0,61 | 1,43 | 0,06 | 2,6 % |
+| 1024² | 12,9 | 81,5 | 3,04 | 3,57 | 2,55 | 3,36 | 0,45 | 3,7 % |
+| 2048² | 54,3 | 77,3 | 12,3 | 14,8 | 10,6 | 13,1 | 3,41 | 2,1 % |
+
+U režimu "Balanced" je isto mjerenje bilo 8–11 % sporije i s rasipanjem do 7,3 % ([bench/results/seq_balanced.csv](bench/results/seq_balanced.csv)). Sva kasnija mjerenja (OpenMP, SIMD) rade se u režimu "Best performance".
+
+### Zamka: 4K aliasing
+
+Prvo mjerenje je imalo rasipanje do **68 %**, i to samo u fazi "voda + brzina". Ista faza je, uz bit-identičan ulaz i rezultat, trajala 0,16, 0,38, 0,60 ili 0,82 ms (256²), uvijek isto unutar jednog procesa. Postupnim eliminisanjem (jezgro, ASLR, fizička memorija, vrijeme od starta) pokazalo se da zavisi samo od **međusobnog položaja nizova u memoriji**: zamjena niza `u` svježom kopijom je sporu fazu činila brzom.
+
+Uzrok: sva polja mreže su iste veličine i alocirana jedno za drugim, pa su počinjala na **istom pomaku unutar 4 KB stranice** (`u ≡ fR`, `v ≡ fT`, `fL ≡ fB` po modulu 4096). Petlja upiše `u[i]`, pa u sljedećoj iteraciji čita `fR[i]`. Procesor upoređuje samo nižih 12 bitova adrese, pogrešno zaključi da čitanje zavisi od upisa i čeka. Četiri nivoa brzine (`0,16 + k · 0,22` ms) odgovaraju broju pogođenih izlaznih nizova (`d`, `u`, `v`).
+
+Popravka je u [AlignedAllocator.h](include/erosion/AlignedAllocator.h): svako polje dobija vlastiti pomak unutar stranice (korak 256 B; polja mreže slotovi 0–8, pomoćni baferi simulacije 9–11). Ovo je važno i za OpenMP/SIMD mjerenja, jer bi inače nasumično usporavanje izgledalo kao loše skaliranje. Na bateriji je isti kod bio oko 2× sporiji, a vremena su skakala i do 60% između pokretanja.
 
 ### Struktura koda
 

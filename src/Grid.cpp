@@ -21,9 +21,14 @@ void Grid::resize(int w, int h, float cell)
     height   = h;
     cellSize = cell;
 
+    // Svako polje na svom pomaku unutar stranice (slotovi 0–8), vidi AlignedAllocator.
+    // Stara polja se prvo oslobode, da assign zaista alocira novu memoriju.
     const std::size_t n = cellCount();
-    for (Field* f : {&b, &d, &s, &fL, &fR, &fT, &fB, &u, &v})
+    StaggerScope      stagger(0);
+    for (Field* f : {&b, &d, &s, &fL, &fR, &fT, &fB, &u, &v}) {
+        Field().swap(*f);
         f->assign(n, 0.0f);
+    }
 }
 
 void Grid::clear()
