@@ -256,7 +256,9 @@ void transportSedimentFlux(Grid& g, const Params& p, Field& sNext, Field& rate)
             const std::size_t i   = g.idx(x, y);
             const float       out = fL[i] + fR[i] + fT[i] + fB[i];
 
-            float value = s[i] * (1.0f - out * r[i]);
+            // out * r <= 1 u egzaktnoj aritmetici; zaokruživanje može dati
+            // 1 + 1e-7, pa bi ćelija koja šalje svu vodu dobila negativan sediment.
+            float value = s[i] * std::max(0.0f, 1.0f - out * r[i]);
             if (x > 0)     value += s[i - 1] * fR[i - 1] * r[i - 1]; // lijevi šalje desno
             if (x < W - 1) value += s[i + 1] * fL[i + 1] * r[i + 1]; // desni šalje lijevo
             if (y > 0)     value += s[i - W] * fB[i - W] * r[i - W]; // gornji šalje dolje
@@ -266,6 +268,16 @@ void transportSedimentFlux(Grid& g, const Params& p, Field& sNext, Field& rate)
     }
 
     std::swap(g.s, sNext);
+}
+
+void evaporate(Grid& g, const Params& p)
+{
+    if (p.evaporationRate == 0.0f)
+        return;
+    // max(0, ...) da prevelik Ke * dt ne napravi negativnu vodu.
+    const float factor = std::max(0.0f, 1.0f - p.evaporationRate * p.dt);
+    for (float& d : g.d)
+        d *= factor;
 }
 
 } // namespace erosion::seq

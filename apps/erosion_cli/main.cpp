@@ -53,6 +53,7 @@ void printUsage()
         "  --steps N           broj koraka (zadano 0: samo početno stanje)\n"
         "  --dt T              vremenski korak (zadano 0.02)\n"
         "  --rain R            kiša: visina vode po ćeliji u sekundi (zadano 0)\n"
+        "  --evaporation K     udio vode koji ispari u sekundi (zadano 0.015, 0 = bez)\n"
         "  --source X Y R Q    izvor vode u (X, Y), poluprečnik R, Q po sekundi\n"
         "                      (može se ponoviti)\n"
         "\n"
@@ -142,6 +143,7 @@ int main(int argc, char** argv)
             else if (arg == "--steps")           { steps = std::stoi(next()); }
             else if (arg == "--dt")              { params.dt = std::stof(next()); }
             else if (arg == "--rain")            { params.rainRate = std::stof(next()); }
+            else if (arg == "--evaporation")     { params.evaporationRate = std::stof(next()); }
             else if (arg == "--source") {
                 WaterSource s;
                 s.x      = std::stoi(next());
@@ -242,13 +244,23 @@ int main(int argc, char** argv)
             std::printf("  erozija        %.4f ms/korak\n", t.erosion / static_cast<double>(t.steps));
             std::printf("  transport sed. %.4f ms/korak (%s)\n", t.advect / static_cast<double>(t.steps),
                         params.sedimentTransport == SedimentTransport::Flux ? "flux" : "semi-Lagrangian");
+            std::printf("  isparavanje    %.4f ms/korak\n", t.evaporate / static_cast<double>(t.steps));
         }
 
         const FieldRange dr = fieldRange(g.d);
         const double     water1 = totalWater(g);
         std::printf("Voda:           %.6e -> %.6e", water0, water1);
-        if (water0 > 0.0 && params.rainRate == 0.0f && sources.empty())
-            std::printf("  (relativna promjena %.2e)", (water1 - water0) / water0);
+        if (water0 > 0.0 && params.rainRate == 0.0f && sources.empty()) {
+            if (params.evaporationRate == 0.0f) {
+                std::printf("  (relativna promjena %.2e)", (water1 - water0) / water0);
+            } else {
+                // Bez kiše i izvora voda se smanjuje tačno faktorom isparavanja.
+                const double expected =
+                    water0 * std::pow(std::max(0.0, 1.0 - double(params.evaporationRate) * params.dt), steps);
+                std::printf("  (očekivano zbog isparavanja %.6e, odstupanje %.2e)",
+                            expected, expected > 0.0 ? (water1 - expected) / expected : 0.0);
+            }
+        }
         std::printf("\n");
         std::printf("Dubina vode:    min = %.6f, max = %.6f\n", dr.min, dr.max);
         const double material1 = totalMaterial(g);

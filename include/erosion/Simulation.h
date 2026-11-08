@@ -15,9 +15,13 @@ struct PhaseTimings {
     double water    = 0.0;
     double erosion  = 0.0;
     double advect   = 0.0;
+    double evaporate = 0.0;
     long   steps    = 0;
 
-    [[nodiscard]] double total() const { return addWater + flux + water + erosion + advect; }
+    [[nodiscard]] double total() const
+    {
+        return addWater + flux + water + erosion + advect + evaporate;
+    }
 };
 
 /// Vodi simulaciju: drži stanje mreže, parametre i izvore vode, i redom
@@ -29,7 +33,7 @@ struct PhaseTimings {
 ///   3. visina vode + brzina        ✔ korak 2
 ///   4. erozija i depozicija        ✔ korak 4
 ///   5. transport sedimenta         ✔ korak 5
-///   6. isparavanje                   korak 6
+///   6. isparavanje                 ✔ korak 6
 ///
 /// Izuzetak: uz SedimentTransport::Flux (zadano) transport sedimenta ide
 /// između 2 i 3, jer koristi fluks i vodu PRIJE ažuriranja (d1).

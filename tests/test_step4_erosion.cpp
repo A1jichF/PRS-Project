@@ -174,7 +174,11 @@ TEST(mirno_jezero_ne_erodira)
     fillToLevel(g, 30.0f);
     const Field b0 = g.b;
 
-    Simulation sim(std::move(g));
+    // Bez isparavanja: ono bi spustilo nivo različito u plitkim i dubokim
+    // ćelijama, pa površina više ne bi bila ravna i voda bi potekla.
+    Params p;
+    p.evaporationRate = 0.0f;
+    Simulation sim(std::move(g), p);
     sim.run(500);
     CHECK(maxAbsDiff(sim.grid().b, b0) == 0.0f);
     CHECK(fieldRange(sim.grid().s).max == 0.0f);

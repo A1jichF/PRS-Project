@@ -58,7 +58,10 @@ void Simulation::step()
     if (slTransport)
         seq::advectSediment(m_grid, m_params, m_sScratch);
     const auto t6 = Clock::now();
+    seq::evaporate(m_grid, m_params);
+    const auto t7 = Clock::now();
 
+    m_timings.evaporate += msSince(t6, t7);
     m_timings.addWater += msSince(t0, t1);
     m_timings.flux     += msSince(t1, t2);
     m_timings.advect   += msSince(t2, t3) + msSince(t5, t6);

@@ -28,6 +28,15 @@ double relErr(double actual, double expected)
     return std::abs(actual - expected) / std::abs(expected);
 }
 
+/// Testovi koraka 2 provjeravaju samo tok vode, pa isključuju isparavanje
+/// (ono namjerno smanjuje vodu i testira se u koraku 6).
+Params noEvaporation()
+{
+    Params p;
+    p.evaporationRate = 0.0f;
+    return p;
+}
+
 Grid fbmGrid(int n, float heightScale, float cellSize = 2.0f)
 {
     Grid g(n, n, cellSize);
@@ -43,7 +52,7 @@ TEST(mirno_jezero_na_ravnom_terenu_ostaje_mirno)
 {
     Grid g(64, 64, 2.0f);
     setupFlatLake(g, 10.0f, 2.0f);
-    Simulation sim(std::move(g));
+    Simulation sim(std::move(g), noEvaporation());
     sim.run(500);
 
     const Grid& r = sim.grid();
@@ -62,7 +71,7 @@ TEST(mirno_jezero_na_neravnom_terenu_ostaje_mirno)
     fillToLevel(g, 30.0f);
     const Field d0 = g.d;
 
-    Simulation sim(std::move(g));
+    Simulation sim(std::move(g), noEvaporation());
     sim.run(500);
 
     CHECK(maxAbsDiff(sim.grid().d, d0) < 1e-5f);
@@ -78,7 +87,7 @@ TEST(masa_vode_se_cuva_na_fbm_terenu)
     fillConstant(g.d, 1.0f); // sloj vode prati teren, pa voda teče nizbrdo
     const double m0 = totalWater(g);
 
-    Simulation sim(std::move(g));
+    Simulation sim(std::move(g), noEvaporation());
     float maxCfl = 0.0f;
     for (int i = 0; i < 1000; ++i) {
         sim.step();
@@ -103,7 +112,7 @@ TEST(tanak_sloj_vode_na_strmom_terenu_nikad_negativan)
     fillConstant(g.d, 0.01f);
     const double m0 = totalWater(g);
 
-    Simulation sim(std::move(g));
+    Simulation sim(std::move(g), noEvaporation());
     for (int i = 0; i < 500; ++i) {
         sim.step();
         if (fieldRange(sim.grid().d).min < 0.0f) {
@@ -118,7 +127,7 @@ TEST(rubovi_su_zatvoreni)
 {
     Grid g = fbmGrid(48, 40.0f);
     fillConstant(g.d, 2.0f);
-    Simulation sim(std::move(g));
+    Simulation sim(std::move(g), noEvaporation());
     sim.run(100);
 
     const Grid& r = sim.grid();
@@ -137,7 +146,7 @@ TEST(rubovi_su_zatvoreni)
 TEST(kisa_dodaje_tacno_ocekivanu_kolicinu)
 {
     Grid g = fbmGrid(64, 40.0f);
-    Params p;
+    Params p = noEvaporation();
     p.rainRate = 0.5f;
     Simulation sim(std::move(g), p);
     sim.run(100);
@@ -172,7 +181,7 @@ TEST(dam_break_je_simetrican_i_cuva_masu)
     setupDamBreak(g, 1.0f, 3.0f, 8);
     const double m0 = totalWater(g);
 
-    Simulation sim(std::move(g));
+    Simulation sim(std::move(g), noEvaporation());
     const int c        = N / 2;
     float     ringPeak = 0.0f; // najveća dubina u tački 20 ćelija od centra
     float     maxCfl   = 0.0f;
@@ -229,7 +238,7 @@ TEST(voda_tece_nizbrdo)
     };
     const double cx0 = centroidX(g);
 
-    Simulation sim(std::move(g));
+    Simulation sim(std::move(g), noEvaporation());
     sim.run(20);
     // Na sredini kosine (dalje od zida) brzina mora biti negativna.
     CHECK(sim.grid().u[sim.grid().idx(W / 2, H / 2)] < 0.0f);

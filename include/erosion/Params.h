@@ -29,7 +29,7 @@ struct Params {
 
     // ── Voda ─────────────────────────────────────────────────────────────────
     float rainRate        = 0.0f;   ///< Visina vode dodana svakoj ćeliji u sekundi
-    float evaporationRate = 0.015f; ///< Ke: udio vode koji ispari u sekundi (korak 6)
+    float evaporationRate = 0.015f; ///< Ke: udio vode koji ispari u sekundi (0 = bez isparavanja)
     /// Ispod ove prosječne dubine brzina se postavlja na 0, jer bi dijeljenje
     /// malom dubinom dalo ogromne (nefizikalne) brzine na skoro suhim ćelijama.
     float minDepthForVelocity = 1e-4f;

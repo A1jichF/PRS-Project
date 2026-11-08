@@ -86,5 +86,11 @@ void advectSediment(Grid& g, const Params& p, Field& sNext);
 /// sNext sadrži stari sediment (zamjena bafera).
 void transportSedimentFlux(Grid& g, const Params& p, Field& sNext, Field& rate);
 
+/// Faza 6: isparavanje.
+///   d = d * max(0, 1 - Ke * dt)
+/// Isparava samo voda; sediment ostaje i, kako voda nestaje, taloži se kroz
+/// fazu 4 (kapacitet C pada s brzinom i dubinom).
+void evaporate(Grid& g, const Params& p);
+
 } // namespace seq
 } // namespace erosion
