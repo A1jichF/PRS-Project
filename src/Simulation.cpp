@@ -19,6 +19,7 @@ double msSince(Clock::time_point t0, Clock::time_point t1)
 Simulation::Simulation(Grid grid, Params params)
     : m_grid(std::move(grid))
     , m_params(params)
+    , m_bScratch(m_grid.cellCount(), 0.0f)
 {
 }
 
@@ -31,10 +32,18 @@ void Simulation::step()
     const auto t2 = Clock::now();
     seq::updateWaterAndVelocity(m_grid, m_params);
     const auto t3 = Clock::now();
+    if (m_params.erosionEnabled) {
+        // Ako je neko promijenio dimenzije mreže preko grid(), uskladi bafer.
+        if (m_bScratch.size() != m_grid.cellCount())
+            m_bScratch.assign(m_grid.cellCount(), 0.0f);
+        seq::erodeDeposit(m_grid, m_params, m_bScratch);
+    }
+    const auto t4 = Clock::now();
 
     m_timings.addWater += msSince(t0, t1);
     m_timings.flux     += msSince(t1, t2);
     m_timings.water    += msSince(t2, t3);
+    m_timings.erosion  += msSince(t3, t4);
     ++m_timings.steps;
 
     ++m_stepCount;

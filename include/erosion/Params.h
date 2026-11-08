@@ -24,10 +24,23 @@ struct Params {
     float minDepthForVelocity = 1e-4f;
 
     // ── Erozija i depozicija (korak 4) ───────────────────────────────────────
-    float sedimentCapacity = 1.0f;  ///< Kc
-    float dissolvingRate   = 0.5f;  ///< Ks
-    float depositionRate   = 1.0f;  ///< Kd
-    float minTilt          = 0.05f; ///< Donja granica za sin(nagib), da C ne padne na 0 na ravnom
+    //   C = Kc * max(sin α, minTilt) * |v| * lmax(d)
+    //   C > s: erozija    b -= Ks*dt*(C - s),  s += isto
+    //   C ≤ s: depozicija b += Kd*dt*(s - C),  s -= isto
+    //
+    // Razlika u odnosu na Mei et al.: tamo su Ks i Kd udio po koraku, a ovdje
+    // su brzine [1/s] pomnožene s dt (ograničeno na 1), da rezultat ne zavisi
+    // od izbora dt.
+    bool  erosionEnabled   = true;
+    float sedimentCapacity = 0.5f;  ///< Kc
+    float dissolvingRate   = 0.5f;  ///< Ks [1/s]
+    float depositionRate   = 1.0f;  ///< Kd [1/s]
+    float minTilt          = 0.05f; ///< Donja granica za sin α, da C ne padne na 0 na ravnom
+    /// Kdmax iz Šťava et al. 2008: lmax(d) raste linearno od 0 (d = 0) do 1
+    /// (d >= Kdmax). Tanak sloj vode tako ne erodira punom snagom, što bi
+    /// inače radio zbog umjetno velike brzine na ćelijama koje se isprazne
+    /// u jednom koraku (u = l / dt). 0 isključuje faktor.
+    float maxErosionDepth  = 0.1f;
 
     // ── Termalna erozija (opcionalno) ────────────────────────────────────────
     float talusAngleDeg = 38.0f; ///< Ugao talusa

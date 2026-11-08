@@ -3,6 +3,8 @@
 #include "erosion/Params.h"
 
 #include <algorithm>
+#include <cmath>
+#include <utility>
 
 namespace erosion::seq {
 
@@ -125,6 +127,58 @@ void updateWaterAndVelocity(Grid& g, const Params& p)
             }
         }
     }
+}
+
+void erodeDeposit(Grid& g, const Params& p, Field& bNext)
+{
+    const int    W  = g.width;
+    const int    H  = g.height;
+    const float  l  = g.cellSize;
+    const float  ks = std::min(1.0f, p.dissolvingRate * p.dt);
+    const float  kd = std::min(1.0f, p.depositionRate * p.dt);
+    const float  invMaxDepth = p.maxErosionDepth > 0.0f ? 1.0f / p.maxErosionDepth : 0.0f;
+    const float* b  = g.b.data();
+    const float* d  = g.d.data();
+    const float* u  = g.u.data();
+    const float* v  = g.v.data();
+    float*       s  = g.s.data();
+    float*       bn = bNext.data();
+
+    for (int y = 0; y < H; ++y) {
+        // Centralna razlika u unutrašnjosti, jednostrana na rubu.
+        const int   yu   = y > 0 ? y - 1 : y;
+        const int   yd   = y < H - 1 ? y + 1 : y;
+        const float invY = yd > yu ? 1.0f / (static_cast<float>(yd - yu) * l) : 0.0f;
+
+        for (int x = 0; x < W; ++x) {
+            const int   xl   = x > 0 ? x - 1 : x;
+            const int   xr   = x < W - 1 ? x + 1 : x;
+            const float invX = xr > xl ? 1.0f / (static_cast<float>(xr - xl) * l) : 0.0f;
+
+            const std::size_t i  = g.idx(x, y);
+            const float       gx = (b[g.idx(xr, y)] - b[g.idx(xl, y)]) * invX;
+            const float       gy = (b[g.idx(x, yd)] - b[g.idx(x, yu)]) * invY;
+
+            // sin α = |∇b| / sqrt(1 + |∇b|²)
+            const float grad2 = gx * gx + gy * gy;
+            const float sinA  = std::max(p.minTilt, std::sqrt(grad2 / (1.0f + grad2)));
+            const float speed = std::sqrt(u[i] * u[i] + v[i] * v[i]);
+            const float lmax  = invMaxDepth > 0.0f ? std::min(1.0f, d[i] * invMaxDepth) : 1.0f;
+            const float C     = p.sedimentCapacity * sinA * speed * lmax;
+
+            if (C > s[i]) {
+                const float amount = ks * (C - s[i]);
+                bn[i] = b[i] - amount;
+                s[i] += amount;
+            } else {
+                const float amount = kd * (s[i] - C);
+                bn[i] = b[i] + amount;
+                s[i] -= amount;
+            }
+        }
+    }
+
+    std::swap(g.b, bNext);
 }
 
 } // namespace erosion::seq

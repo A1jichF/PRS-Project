@@ -63,6 +63,13 @@ build/erosion_cli --size 256 --cell-size 1 --scenario dambreak --steps 600 --sna
 
 # kiša i izvor vode (x, y, poluprečnik, količina u sekundi)
 build/erosion_cli --size 256 --rain 0.01 --source 128 40 4 5 --steps 3000
+
+# erozija pod kišom: mapa promjene terena (tamno = erozija, svijetlo = taloženje) i sediment
+build/erosion_cli --size 256 --rain 0.02 --steps 5000 --diff-out diff.pgm --sediment-out sediment.pgm
+
+# ista simulacija bez erozije, ili s drugim konstantama
+build/erosion_cli --size 256 --rain 0.02 --steps 5000 --no-erosion
+build/erosion_cli --size 256 --rain 0.02 --steps 5000 --kc 0.3 --ks 0.3 --kd 1 --kdmax 0.5
 ```
 
 Na Windowsu s MSYS2 (UCRT64) GCC-om programi se linkuju statički (`-static`), pa rade i kad MSYS2 nije na PATH-u.
@@ -75,7 +82,7 @@ Intel procesori od 12. generacije imaju jaka (P) i slabija (E) jezgra. Na i7-135
 start /affinity 1 /wait /b build\erosion_cli.exe --size 512 --scenario layer --steps 300
 ```
 
-Svako mjerenje ponoviti barem 3 puta i uzeti medijan, s laptopom na punjaču i u režimu "Best performance".
+Svako mjerenje ponoviti barem 3 puta i uzeti medijan, s laptopom **na punjaču** i u režimu "Best performance". Na bateriji je isti kod bio oko 2× sporiji, a vremena su skakala i do 60% između pokretanja.
 
 ### Struktura koda
 

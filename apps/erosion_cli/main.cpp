@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <exception>
@@ -55,9 +56,19 @@ void printUsage()
         "  --source X Y R Q    izvor vode u (X, Y), poluprečnik R, Q po sekundi\n"
         "                      (može se ponoviti)\n"
         "\n"
+        "Erozija:\n"
+        "  --no-erosion        isključi eroziju i depoziciju\n"
+        "  --kc K              kapacitet nošenja sedimenta (zadano 0.5)\n"
+        "  --ks K              brzina erozije [1/s] (zadano 0.5)\n"
+        "  --kd K              brzina depozicije [1/s] (zadano 1.0)\n"
+        "  --kdmax D           dubina do koje raste kapacitet, Šťava 2008 (zadano 0.1)\n"
+        "\n"
         "Izlaz:\n"
         "  --out file.pgm      teren (zadano terrain.pgm)\n"
         "  --water-out f.pgm   dubina vode (zadano water.pgm)\n"
+        "  --diff-out f.pgm    promjena terena b - b0 (sivo = bez promjene,\n"
+        "                      tamno = erozija, svijetlo = taloženje)\n"
+        "  --sediment-out f    sediment u vodi\n"
         "  --snapshot-every K  upiši vodu svakih K koraka kao <prefix>_NNNNNN.pgm\n"
         "  --snapshot-prefix P (zadano water)\n"
         "  --8bit              8-bitni PGM (zadano 16-bitni)\n"
@@ -95,6 +106,8 @@ int main(int argc, char** argv)
     std::string inputPath;
     std::string outPath        = "terrain.pgm";
     std::string waterOutPath   = "water.pgm";
+    std::string diffOutPath;
+    std::string sedimentOutPath;
     std::string snapshotPrefix = "water";
     int         snapshotEvery  = 0;
     bool        bits16         = true;
@@ -135,8 +148,15 @@ int main(int argc, char** argv)
                 s.rate   = std::stof(next());
                 sources.push_back(s);
             }
+            else if (arg == "--no-erosion")      { params.erosionEnabled   = false; }
+            else if (arg == "--kc")              { params.sedimentCapacity = std::stof(next()); }
+            else if (arg == "--ks")              { params.dissolvingRate   = std::stof(next()); }
+            else if (arg == "--kd")              { params.depositionRate   = std::stof(next()); }
+            else if (arg == "--kdmax")           { params.maxErosionDepth  = std::stof(next()); }
             else if (arg == "--out")             { outPath = next(); }
             else if (arg == "--water-out")       { waterOutPath = next(); }
+            else if (arg == "--diff-out")        { diffOutPath = next(); }
+            else if (arg == "--sediment-out")    { sedimentOutPath = next(); }
             else if (arg == "--snapshot-every")  { snapshotEvery = std::stoi(next()); }
             else if (arg == "--snapshot-prefix") { snapshotPrefix = next(); }
             else if (arg == "--8bit")            { bits16 = false; }
@@ -168,6 +188,7 @@ int main(int argc, char** argv)
 
         const double water0    = totalWater(grid);
         const double material0 = totalMaterial(grid);
+        const Field  b0        = grid.b;
 
         Simulation sim(std::move(grid), params);
         for (const WaterSource& s : sources)
@@ -210,6 +231,7 @@ int main(int argc, char** argv)
             std::printf("  dodavanje vode %.4f ms/korak\n", t.addWater / static_cast<double>(t.steps));
             std::printf("  fluks          %.4f ms/korak\n", t.flux / static_cast<double>(t.steps));
             std::printf("  voda + brzina  %.4f ms/korak\n", t.water / static_cast<double>(t.steps));
+            std::printf("  erozija        %.4f ms/korak\n", t.erosion / static_cast<double>(t.steps));
         }
 
         const FieldRange dr = fieldRange(g.d);
@@ -219,7 +241,25 @@ int main(int argc, char** argv)
             std::printf("  (relativna promjena %.2e)", (water1 - water0) / water0);
         std::printf("\n");
         std::printf("Dubina vode:    min = %.6f, max = %.6f\n", dr.min, dr.max);
-        std::printf("Materijal:      %.6e -> %.6e\n", material0, totalMaterial(g));
+        const double material1 = totalMaterial(g);
+        std::printf("Materijal:      %.6e -> %.6e", material0, material1);
+        if (material0 > 0.0)
+            std::printf("  (relativna promjena %.2e)", (material1 - material0) / material0);
+        std::printf("\n");
+
+        // Erozija: koliko je terena odneseno, a koliko nataloženo.
+        Field  diff(g.cellCount());
+        double eroded = 0.0, deposited = 0.0;
+        for (std::size_t i = 0; i < g.cellCount(); ++i) {
+            diff[i] = g.b[i] - b0[i];
+            if (diff[i] < 0.0f) eroded    -= diff[i];
+            else                deposited += diff[i];
+        }
+        const double area = static_cast<double>(g.cellSize) * g.cellSize;
+        const FieldRange diffRange = fieldRange(diff);
+        std::printf("Erozija:        odneseno %.4e, nataloženo %.4e, u vodi %.4e (zapremina)\n",
+                    eroded * area, deposited * area, fieldSum(g.s) * area);
+        std::printf("Promjena b:     min = %.4f, max = %.4f\n", diffRange.min, diffRange.max);
         std::printf("CFL (max):      %.4f%s\n", maxCfl,
                     maxCfl >= 0.999f ? "  (neke ćelije se isprazne u jednom koraku: tanak sloj na strmini)" : "");
         if (!allFinite(g.d) || !allFinite(g.u) || !allFinite(g.v))
@@ -231,7 +271,21 @@ int main(int argc, char** argv)
             throw std::runtime_error("ne mogu upisati " + outPath);
         if (!writePGM(waterOutPath, g.d.data(), g.width, g.height, bits16))
             throw std::runtime_error("ne mogu upisati " + waterOutPath);
-        std::printf("Upisano:        %s, %s\n", outPath.c_str(), waterOutPath.c_str());
+        std::printf("Upisano:        %s, %s", outPath.c_str(), waterOutPath.c_str());
+        if (!diffOutPath.empty()) {
+            // Simetričan opseg oko nule, da siva boja znači "bez promjene".
+            const float m = std::max(std::abs(diffRange.min), std::abs(diffRange.max));
+            const float r = m > 0.0f ? m : 1.0f;
+            if (!writePGM(diffOutPath, diff.data(), g.width, g.height, -r, r, bits16))
+                throw std::runtime_error("ne mogu upisati " + diffOutPath);
+            std::printf(", %s", diffOutPath.c_str());
+        }
+        if (!sedimentOutPath.empty()) {
+            if (!writePGM(sedimentOutPath, g.s.data(), g.width, g.height, bits16))
+                throw std::runtime_error("ne mogu upisati " + sedimentOutPath);
+            std::printf(", %s", sedimentOutPath.c_str());
+        }
+        std::printf("\n");
     } catch (const std::exception& e) {
         std::fprintf(stderr, "Greška: %s\n", e.what());
         return 1;

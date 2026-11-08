@@ -6,6 +6,8 @@
 // dobit će svoje namespace-ove s istim potpisima, tako da ih Simulation može
 // mijenjati i da testovi mogu porediti rezultate.
 
+#include "erosion/AlignedAllocator.h"
+
 #include <span>
 
 namespace erosion {
@@ -42,6 +44,19 @@ void computeFlux(Grid& g, const Params& p);
 ///
 /// Radi "u mjestu": čita fluks susjeda (ovdje se ne mijenja) i svoje d.
 void updateWaterAndVelocity(Grid& g, const Params& p);
+
+/// Faza 4: erozija i depozicija.
+///   sin α  iz centralnih razlika terena (na rubu jednostrano)
+///   C      = Kc * max(sin α, minTilt) * |(u, v)| * lmax(d)
+///   C > s: b -= Ks*dt*(C - s), s += isto     (erozija)
+///   C ≤ s: b += Kd*dt*(s - C), s -= isto     (depozicija)
+///
+/// Double-buffering: nagib se računa iz STAROG terena susjeda, pa se novi teren
+/// piše u `bNext`, a na kraju se g.b i bNext zamijene (O(1), samo pokazivači).
+/// Tako rezultat ne zavisi od redoslijeda obrade ćelija. `bNext` mora imati
+/// g.cellCount() elemenata; nakon poziva sadrži stari teren.
+/// Sediment s se mijenja u mjestu (čita se samo vlastita ćelija).
+void erodeDeposit(Grid& g, const Params& p, Field& bNext);
 
 } // namespace seq
 } // namespace erosion
