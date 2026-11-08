@@ -76,13 +76,15 @@ Na Windowsu s MSYS2 (UCRT64) GCC-om programi se linkuju statički (`-static`), p
 
 ### Mjerenje vremena na hibridnim procesorima
 
-Intel procesori od 12. generacije imaju jaka (P) i slabija (E) jezgra. Na i7-1355U je isti sekvencijalni kod na E-jezgru **2,1× sporiji** (82 naspram 39 Mćelija/s na 512²), a Windows sam bira gdje će program raditi. Zato se sekvencijalna mjerenja rade **vezano za P-jezgro**:
+Intel procesori od 12. generacije imaju jaka (P) i slabija (E) jezgra. Na i7-1355U je isti sekvencijalni kod na E-jezgru **2,1× sporiji** (82 naspram 39 Mćelija/s na 512²), a Windows sam bira gdje će program raditi. Zato se sekvencijalna mjerenja rade **vezano za P-jezgro**. To radi skripta [bench/bench_seq.ps1](bench/bench_seq.ps1): pokreće sve 4 veličine mreže po 3 puta na CPU 0, dopisuje rezultate u `bench/results/seq.csv` i ispisuje medijan po fazama:
 
-```bat
-start /affinity 1 /wait /b build\erosion_cli.exe --size 512 --scenario layer --steps 300
+```powershell
+powershell -ExecutionPolicy Bypass -File bench\bench_seq.ps1
 ```
 
-Svako mjerenje ponoviti barem 3 puta i uzeti medijan, s laptopom **na punjaču** i u režimu "Best performance". Na bateriji je isti kod bio oko 2× sporiji, a vremena su skakala i do 60% između pokretanja.
+Skripta odbija da radi kad je laptop na bateriji. Za ručno pokretanje: `start /affinity 1 /wait /b build\erosion_cli.exe ... --csv rezultati.csv`.
+
+Mjerenja raditi s laptopom **na punjaču** i u režimu "Best performance". Na bateriji je isti kod bio oko 2× sporiji, a vremena su skakala i do 60% između pokretanja.
 
 ### Struktura koda
 
@@ -98,6 +100,7 @@ Svako mjerenje ponoviti barem 3 puta i uzeti medijan, s laptopom **na punjaču**
 | [include/erosion/Scenarios.h](include/erosion/Scenarios.h) | Početna stanja: mirno jezero, punjenje do nivoa, dam-break. |
 | [apps/erosion_cli/](apps/erosion_cli/) | Komandna linija: generisanje i učitavanje terena (kasnije i simulacija). |
 | [tests/](tests/) | Testovi bez vanjskih zavisnosti. |
+| [bench/](bench/) | Skripte za mjerenje i rezultati (`bench/results/*.csv`). |
 
 Biblioteka `erosion` ne zavisi ni od kakve grafike, pa se kasnije može uključiti u [opengl-forward-renderer](https://github.com/bakir004/opengl-forward-renderer) kao zasebna scena.
 
@@ -106,7 +109,7 @@ Biblioteka `erosion` ne zavisi ni od kakve grafike, pa se kasnije može uključi
 | Šta | Mei et al. | Kod nas | Zašto |
 |---|---|---|---|
 | `Ks`, `Kd` | udio po koraku | brzina [1/s] × `dt` | rezultat ne zavisi od izbora `dt` |
-| Kapacitet `C` | `Kc · sin α · \|v\|` | `× lmax(d)` (Šťava et al. 2008) | na ćelijama koje se isprazne u jednom koraku brzina je umjetno `l/dt` |
+| Kapacitet `C` | `Kc · sin α · \|v\|` | `× lmax(d)` (Šťava et al. 2008), `Kdmax = 0,5` | na ćelijama koje se isprazne u jednom koraku brzina je umjetno `l/dt` (vidi "Podešavanje parametara") |
 | Transport sedimenta | semi-Lagrangian `s(x − v·Δt)` | **konzervativno kroz virtualne cijevi** (`--transport flux`, zadano); Mei-jeva metoda ostaje kao `--transport sl` | vidi ispod |
 
 **Transport sedimenta.** Semi-Lagrangian advekcija rješava `∂s/∂t + v·∇s = 0`, dakle tretira vodu kao nestišljivu. U plitkoj vodi to ne vrijedi: tamo gdje se tok usporava i skuplja (dno padine, ulaz u jezero, `∇·v < 0`) sediment nestaje, a to su upravo mjesta gdje bi se trebao taložiti. Na fBm terenu 256² s kišom, nakon 5000 koraka:
@@ -115,6 +118,20 @@ Biblioteka `erosion` ne zavisi ni od kakve grafike, pa se kasnije može uključi
 |---|---|---|
 | semi-Lagrangian (Mei) | **−19,8 %** | −70,3 / +31,6 |
 | konzervativni kroz cijevi | **+1,2·10⁻⁷** | −29,4 / +21,2 |
+
+### Podešavanje parametara: `Kdmax`
+
+Formula za brzinu `u = ΔW / (l · d̄)` daje na ćelijama koje se isprazne u jednom koraku `|v| ≈ l / dt`. Mjerenje pokazuje da je to **artefakt, a ne fizika**: kad se `dt` prepolovi, udio mokrih ćelija s CFL > 0,5 skoro ne pada (za fizikalnu brzinu bi pao na pola), dakle brzina raste kao `1/dt`. Manji `dt` zato ne pomaže, a faktor dubine `lmax` (Šťava et al.) pomaže. fBm 256², kiša 0,02, 100 s simuliranog vremena; "jama" je ćelija niža za više od 1 od sva 4 susjeda:
+
+| `Kdmax` | jame (dt = 0,02 / 0,01 / 0,005) | mokre ćelije s CFL > 0,5 | najdublja erozija |
+|---|---|---|---|
+| 0,1 | 191 / 258 / 259 | 26 % / 22 % / 16 % | −29 |
+| **0,5** (zadano) | **31 / 39 / 28** | 50 % / 46 % / 39 % | −25 |
+| 1,0 | 29 (dt = 0,02) | 60 % | −23 |
+
+Uz `Kdmax = 0,5` erozija se skuplja u jasne kanale umjesto da se razlije po padini, a rezultat praktično ne zavisi od `dt`, što potvrđuje i skaliranje `Ks`/`Kd` s `dt`.
+
+### Transport sedimenta
 
 Konzervativni transport šalje susjedu isti udio sedimenta kao i vode (isti fluks iz faze 2), pa se masa čuva do greške zaokruživanja, a sediment se taloži nizvodno. Kao i update vode, to je stencil s 4 susjeda (gather, bez konflikta pisanja), pa se jednako dobro paralelizuje. Semi-Lagrangian ostaje u kodu za poređenje, a njegov nepravilan pristup memoriji je zanimljiv za SIMD/OpenMP analizu.
 

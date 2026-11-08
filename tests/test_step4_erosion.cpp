@@ -72,7 +72,8 @@ TEST(depozicija_kad_je_sediment_veci_od_kapaciteta)
 
 TEST(plitka_voda_smanjuje_kapacitet_lmax)
 {
-    Params p; // Kdmax = 0.1
+    Params p;
+    p.maxErosionDepth = 0.1f;
     Grid   g = slopeCell(0.0f, 0.05f); // d = Kdmax / 2 -> lmax = 0.5
     Field  scratch(g.cellCount());
     seq::erodeDeposit(g, p, scratch);

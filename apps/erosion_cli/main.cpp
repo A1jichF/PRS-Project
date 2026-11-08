@@ -62,7 +62,7 @@ void printUsage()
         "  --kc K              kapacitet nošenja sedimenta (zadano 0.5)\n"
         "  --ks K              brzina erozije [1/s] (zadano 0.5)\n"
         "  --kd K              brzina depozicije [1/s] (zadano 1.0)\n"
-        "  --kdmax D           dubina do koje raste kapacitet, Šťava 2008 (zadano 0.1)\n"
+        "  --kdmax D           dubina do koje raste kapacitet, Šťava 2008 (zadano 0.5)\n"
         "  --transport T       transport sedimenta: flux (zadano, čuva masu)\n"
         "                      ili sl (Mei et al., semi-Lagrangian, gubi masu)\n"
         "\n"
@@ -75,6 +75,9 @@ void printUsage()
         "  --snapshot-every K  upiši vodu svakih K koraka kao <prefix>_NNNNNN.pgm\n"
         "  --snapshot-prefix P (zadano water)\n"
         "  --8bit              8-bitni PGM (zadano 16-bitni)\n"
+        "  --csv file.csv      dopiši red s mjerenjem (ms/korak po fazama); zaglavlje\n"
+        "                      se upisuje ako fajl ne postoji\n"
+        "  --tag T             oznaka u CSV redu (npr. seq, omp8), zadano seq\n"
         "  --help");
 }
 
@@ -111,6 +114,8 @@ int main(int argc, char** argv)
     std::string waterOutPath   = "water.pgm";
     std::string diffOutPath;
     std::string sedimentOutPath;
+    std::string csvPath;
+    std::string csvTag = "seq";
     std::string snapshotPrefix = "water";
     int         snapshotEvery  = 0;
     bool        bits16         = true;
@@ -170,6 +175,8 @@ int main(int argc, char** argv)
             else if (arg == "--snapshot-every")  { snapshotEvery = std::stoi(next()); }
             else if (arg == "--snapshot-prefix") { snapshotPrefix = next(); }
             else if (arg == "--8bit")            { bits16 = false; }
+            else if (arg == "--csv")             { csvPath = next(); }
+            else if (arg == "--tag")             { csvTag = next(); }
             else {
                 std::fprintf(stderr, "Nepoznata opcija: %s\n\n", argv[i]);
                 printUsage();
@@ -245,6 +252,26 @@ int main(int argc, char** argv)
             std::printf("  transport sed. %.4f ms/korak (%s)\n", t.advect / static_cast<double>(t.steps),
                         params.sedimentTransport == SedimentTransport::Flux ? "flux" : "semi-Lagrangian");
             std::printf("  isparavanje    %.4f ms/korak\n", t.evaporate / static_cast<double>(t.steps));
+
+            if (!csvPath.empty()) {
+                bool needHeader = true;
+                if (std::FILE* probe = std::fopen(csvPath.c_str(), "rb")) {
+                    needHeader = std::fgetc(probe) == EOF;
+                    std::fclose(probe);
+                }
+                std::FILE* csv = std::fopen(csvPath.c_str(), "ab");
+                if (!csv)
+                    throw std::runtime_error("ne mogu otvoriti " + csvPath);
+                if (needHeader)
+                    std::fputs("tag,width,height,steps,ms_per_step,mcells_per_s,"
+                               "add_water,flux,transport,water,erosion,evaporate\n", csv);
+                const double n = static_cast<double>(t.steps);
+                std::fprintf(csv, "%s,%d,%d,%ld,%.6f,%.3f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f\n",
+                             csvTag.c_str(), g.width, g.height, t.steps, msPerStep, mcells,
+                             t.addWater / n, t.flux / n, t.advect / n, t.water / n,
+                             t.erosion / n, t.evaporate / n);
+                std::fclose(csv);
+            }
         }
 
         const FieldRange dr = fieldRange(g.d);

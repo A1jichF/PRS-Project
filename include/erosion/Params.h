@@ -51,7 +51,9 @@ struct Params {
     /// (d >= Kdmax). Tanak sloj vode tako ne erodira punom snagom, što bi
     /// inače radio zbog umjetno velike brzine na ćelijama koje se isprazne
     /// u jednom koraku (u = l / dt). 0 isključuje faktor.
-    float maxErosionDepth  = 0.1f;
+    /// 0.5 je izabrano mjerenjem (README, "Podešavanje parametara"): u odnosu
+    /// na 0.1 daje 6–8× manje jama (numeričkih artefakata), za svaki dt.
+    float maxErosionDepth  = 0.5f;
 
     // ── Transport sedimenta (korak 5) ────────────────────────────────────────
     SedimentTransport sedimentTransport = SedimentTransport::Flux;
