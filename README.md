@@ -107,6 +107,33 @@ Uzrok: sva polja mreže su iste veličine i alocirana jedno za drugim, pa su po�
 
 Popravka je u [AlignedAllocator.h](include/erosion/AlignedAllocator.h): svako polje dobija vlastiti pomak unutar stranice (korak 256 B; polja mreže slotovi 0–8, pomoćni baferi simulacije 9–11). Ovo je važno i za OpenMP/SIMD mjerenja, jer bi inače nasumično usporavanje izgledalo kao loše skaliranje. Na bateriji je isti kod bio oko 2× sporiji, a vremena su skakala i do 60% između pokretanja.
 
+### 3D prikaz u opengl-forward-renderer
+
+Simulacija se može gledati uživo u 3D, u forku engina [KerimSikalo/opengl-forward-renderer](https://github.com/KerimSikalo/opengl-forward-renderer/tree/feature/erosion-scene) (grana `feature/erosion-scene`, scena **"Erosion (PRS)"**). Fork treba biti kloniran **pored** ovog foldera:
+
+```
+Repozitorij\
+  PRS-Project\                 ← ovaj repo
+  opengl-forward-renderer\     ← fork engina
+```
+
+Pokretanje iz foldera `PRS-Project` (PowerShell):
+
+```powershell
+cd ..\opengl-forward-renderer
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DPRS_EROSION_DIR=../PRS-Project
+cmake --build build --parallel
+cd build\test-app
+.\TestApp.exe
+```
+
+- `-DPRS_EROSION_DIR=../PRS-Project` znači da engine koristi **ovaj lokalni folder**, pa se svaka izmjena simulacije vidi odmah nakon `cmake --build`, bez commita. Bez ove opcije engine koristi submodul `external/prs-erosion`, tj. verziju PRS-Projecta fiksiranu u forku.
+- Prvi build traje 3–4 minute (preuzimaju se i kompajliraju assimp, glfw, imgui...), a kasniji su brzi. Nakon prvog puta dovoljna su zadnja tri reda.
+- `C:\msys64\ucrt64\bin` mora biti na PATH-u, kao za build ovog projekta.
+- U aplikaciji: scena je na tipki **1**, kamera se pomjera s WASD i mišem, a **TAB** oslobađa miš za UI. Kontrole simulacije su u lijevom panelu, tab **"Terr"**.
+
+Detalji (submodul, kontrole, šta se dešava u svakom frameu): [docs/erosion.md u forku](https://github.com/KerimSikalo/opengl-forward-renderer/blob/feature/erosion-scene/docs/erosion.md).
+
 ### Struktura koda
 
 | Putanja | Sadržaj |
