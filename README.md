@@ -32,7 +32,7 @@ C++20 i CMake. Teren je mreža `N × N` ćelija, a svaka ćelija čuva: visinu t
    2. računanje fluksa kroz virtualne cijevi,
    3. ažuriranje visine vode i polja brzine,
    4. erozija i depozicija (kapacitet nošenja sedimenta),
-   5. transport sedimenta (semi-Lagrangian advekcija),
+   5. transport sedimenta (semi-Lagrangian advekcija; zadano konzervativni transport kroz cijevi, vidi ispod),
    6. isparavanje,
    7. (opcionalno) termalna erozija.
 
@@ -100,6 +100,23 @@ Svako mjerenje ponoviti barem 3 puta i uzeti medijan, s laptopom **na punjaču**
 | [tests/](tests/) | Testovi bez vanjskih zavisnosti. |
 
 Biblioteka `erosion` ne zavisi ni od kakve grafike, pa se kasnije može uključiti u [opengl-forward-renderer](https://github.com/bakir004/opengl-forward-renderer) kao zasebna scena.
+
+## Odstupanja od Mei et al. 2007
+
+| Šta | Mei et al. | Kod nas | Zašto |
+|---|---|---|---|
+| `Ks`, `Kd` | udio po koraku | brzina [1/s] × `dt` | rezultat ne zavisi od izbora `dt` |
+| Kapacitet `C` | `Kc · sin α · \|v\|` | `× lmax(d)` (Šťava et al. 2008) | na ćelijama koje se isprazne u jednom koraku brzina je umjetno `l/dt` |
+| Transport sedimenta | semi-Lagrangian `s(x − v·Δt)` | **konzervativno kroz virtualne cijevi** (`--transport flux`, zadano); Mei-jeva metoda ostaje kao `--transport sl` | vidi ispod |
+
+**Transport sedimenta.** Semi-Lagrangian advekcija rješava `∂s/∂t + v·∇s = 0`, dakle tretira vodu kao nestišljivu. U plitkoj vodi to ne vrijedi: tamo gdje se tok usporava i skuplja (dno padine, ulaz u jezero, `∇·v < 0`) sediment nestaje, a to su upravo mjesta gdje bi se trebao taložiti. Na fBm terenu 256² s kišom, nakon 5000 koraka:
+
+| Metoda | Promjena ukupnog materijala | Promjena terena (min / max) |
+|---|---|---|
+| semi-Lagrangian (Mei) | **−19,8 %** | −70,3 / +31,6 |
+| konzervativni kroz cijevi | **+1,2·10⁻⁷** | −29,4 / +21,2 |
+
+Konzervativni transport šalje susjedu isti udio sedimenta kao i vode (isti fluks iz faze 2), pa se masa čuva do greške zaokruživanja, a sediment se taloži nizvodno. Kao i update vode, to je stencil s 4 susjeda (gather, bez konflikta pisanja), pa se jednako dobro paralelizuje. Semi-Lagrangian ostaje u kodu za poređenje, a njegov nepravilan pristup memoriji je zanimljiv za SIMD/OpenMP analizu.
 
 ## Način rada
 

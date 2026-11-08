@@ -181,4 +181,91 @@ void erodeDeposit(Grid& g, const Params& p, Field& bNext)
     std::swap(g.b, bNext);
 }
 
+void advectSediment(Grid& g, const Params& p, Field& sNext)
+{
+    const int    W     = g.width;
+    const int    H     = g.height;
+    const float  scale = p.dt / g.cellSize; // brzina [jedinica/s] -> pomak u ćelijama
+    const float  maxX  = static_cast<float>(W - 1);
+    const float  maxY  = static_cast<float>(H - 1);
+    const float* s     = g.s.data();
+    const float* u     = g.u.data();
+    const float* v     = g.v.data();
+    float*       sn    = sNext.data();
+
+    for (int y = 0; y < H; ++y) {
+        for (int x = 0; x < W; ++x) {
+            const std::size_t i = g.idx(x, y);
+
+            // Odakle je voda došla u ovu ćeliju (unazad po brzini).
+            const float fx = std::clamp(static_cast<float>(x) - u[i] * scale, 0.0f, maxX);
+            const float fy = std::clamp(static_cast<float>(y) - v[i] * scale, 0.0f, maxY);
+
+            const int   x0 = static_cast<int>(fx); // fx >= 0, pa je ovo floor
+            const int   y0 = static_cast<int>(fy);
+            const int   x1 = std::min(x0 + 1, W - 1);
+            const int   y1 = std::min(y0 + 1, H - 1);
+            const float tx = fx - static_cast<float>(x0);
+            const float ty = fy - static_cast<float>(y0);
+
+            const float s00 = s[g.idx(x0, y0)];
+            const float s10 = s[g.idx(x1, y0)];
+            const float s01 = s[g.idx(x0, y1)];
+            const float s11 = s[g.idx(x1, y1)];
+
+            const float top    = s00 + (s10 - s00) * tx;
+            const float bottom = s01 + (s11 - s01) * tx;
+            sn[i] = top + (bottom - top) * ty;
+        }
+    }
+
+    std::swap(g.s, sNext);
+}
+
+void transportSedimentFlux(Grid& g, const Params& p, Field& sNext, Field& rate)
+{
+    const int    W        = g.width;
+    const int    H        = g.height;
+    const float  cellArea = g.cellSize * g.cellSize;
+    const float  dt       = p.dt;
+    const float* d        = g.d.data(); // d1: voda prije ažuriranja
+    const float* s        = g.s.data();
+    const float* fL       = g.fL.data();
+    const float* fR       = g.fR.data();
+    const float* fT       = g.fT.data();
+    const float* fB       = g.fB.data();
+    float*       r        = rate.data();
+    float*       sn       = sNext.data();
+    const std::size_t n   = g.cellCount();
+
+    // Ispod ovog odlaznog volumena ćelija ne šalje sediment. Bez praga bi za
+    // fluks reda 1e-40 (denormalni broj) r = dt / (out*dt) prešao opseg float-a
+    // (inf), a 0 * inf = NaN. Obje strane koriste isti r, pa se masa i dalje čuva.
+    constexpr float kMinOutVolume = 1e-20f;
+
+    // Prolaz 1: udio vode (pa i sedimenta) po jedinici fluksa za svaku ćeliju.
+    for (std::size_t i = 0; i < n; ++i) {
+        const float out    = fL[i] + fR[i] + fT[i] + fB[i];
+        const float outVol = out * dt;
+        r[i] = outVol > kMinOutVolume ? dt / std::max(d[i] * cellArea, outVol) : 0.0f;
+    }
+
+    // Prolaz 2: ono što ostane + ono što susjedi pošalju (gather, bez konflikta pisanja).
+    for (int y = 0; y < H; ++y) {
+        for (int x = 0; x < W; ++x) {
+            const std::size_t i   = g.idx(x, y);
+            const float       out = fL[i] + fR[i] + fT[i] + fB[i];
+
+            float value = s[i] * (1.0f - out * r[i]);
+            if (x > 0)     value += s[i - 1] * fR[i - 1] * r[i - 1]; // lijevi šalje desno
+            if (x < W - 1) value += s[i + 1] * fL[i + 1] * r[i + 1]; // desni šalje lijevo
+            if (y > 0)     value += s[i - W] * fB[i - W] * r[i - W]; // gornji šalje dolje
+            if (y < H - 1) value += s[i + W] * fT[i + W] * r[i + W]; // donji šalje gore
+            sn[i] = value;
+        }
+    }
+
+    std::swap(g.s, sNext);
+}
+
 } // namespace erosion::seq

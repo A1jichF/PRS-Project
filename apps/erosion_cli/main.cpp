@@ -62,6 +62,8 @@ void printUsage()
         "  --ks K              brzina erozije [1/s] (zadano 0.5)\n"
         "  --kd K              brzina depozicije [1/s] (zadano 1.0)\n"
         "  --kdmax D           dubina do koje raste kapacitet, Šťava 2008 (zadano 0.1)\n"
+        "  --transport T       transport sedimenta: flux (zadano, čuva masu)\n"
+        "                      ili sl (Mei et al., semi-Lagrangian, gubi masu)\n"
         "\n"
         "Izlaz:\n"
         "  --out file.pgm      teren (zadano terrain.pgm)\n"
@@ -153,6 +155,12 @@ int main(int argc, char** argv)
             else if (arg == "--ks")              { params.dissolvingRate   = std::stof(next()); }
             else if (arg == "--kd")              { params.depositionRate   = std::stof(next()); }
             else if (arg == "--kdmax")           { params.maxErosionDepth  = std::stof(next()); }
+            else if (arg == "--transport") {
+                const std::string_view t = next();
+                if (t == "flux")    params.sedimentTransport = SedimentTransport::Flux;
+                else if (t == "sl") params.sedimentTransport = SedimentTransport::SemiLagrangian;
+                else throw std::invalid_argument("nepoznat transport: " + std::string(t) + " (flux ili sl)");
+            }
             else if (arg == "--out")             { outPath = next(); }
             else if (arg == "--water-out")       { waterOutPath = next(); }
             else if (arg == "--diff-out")        { diffOutPath = next(); }
@@ -232,6 +240,8 @@ int main(int argc, char** argv)
             std::printf("  fluks          %.4f ms/korak\n", t.flux / static_cast<double>(t.steps));
             std::printf("  voda + brzina  %.4f ms/korak\n", t.water / static_cast<double>(t.steps));
             std::printf("  erozija        %.4f ms/korak\n", t.erosion / static_cast<double>(t.steps));
+            std::printf("  transport sed. %.4f ms/korak (%s)\n", t.advect / static_cast<double>(t.steps),
+                        params.sedimentTransport == SedimentTransport::Flux ? "flux" : "semi-Lagrangian");
         }
 
         const FieldRange dr = fieldRange(g.d);

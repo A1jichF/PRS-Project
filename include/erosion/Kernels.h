@@ -58,5 +58,33 @@ void updateWaterAndVelocity(Grid& g, const Params& p);
 /// Sediment s se mijenja u mjestu (čita se samo vlastita ćelija).
 void erodeDeposit(Grid& g, const Params& p, Field& bNext);
 
+/// Faza 5: transport sedimenta, semi-Lagrangian advekcija.
+///   s_new(x, y) = s(x - u*dt/l, y - v*dt/l)   (u ćelijama, bilinearna interpolacija)
+/// Tačka iz koje se uzima sediment odsijeca se na granice mreže.
+///
+/// Double-buffering: čita se STARI s (i susjeda), novi se piše u `sNext`, pa se
+/// g.s i sNext zamijene. Pristup memoriji zavisi od brzine (nepravilan "gather"),
+/// što je važno za kasniju SIMD/OpenMP analizu.
+///
+/// Napomena: metoda NE čuva masu. Ona rješava ∂s/∂t + v·∇s = 0, a za plitku
+/// vodu bi trebalo ∂s/∂t + ∇·(s v) = 0. Razlika je s·(∇·v): gdje se tok
+/// skuplja (∇·v < 0, npr. ulaz u jezero), sediment nestaje.
+void advectSediment(Grid& g, const Params& p, Field& sNext);
+
+/// Faza 5 (alternativa, zadana): konzervativni transport sedimenta kroz cijevi.
+///
+/// Poziva se POSLIJE computeFlux, a PRIJE updateWaterAndVelocity, dok g.d još
+/// sadrži d1 (vodu prije toka). Ćelija i šalje susjedu j udio svog sedimenta
+/// jednak udjelu vode koji šalje:
+///   r_i     = dt / max(d1_i * l², Σf_i * dt)      (udio po jedinici fluksa, Σ udjela <= 1)
+///   s_new_i = s_i * (1 - Σf_i * r_i) + Σ_j s_j * f_{j→i} * r_j
+/// Isti r_j se koristi i kad j računa odlazni i kad i računa dolazni sediment,
+/// pa se ukupna masa čuva do greške zaokruživanja. Ako je s = c*d svuda
+/// (ista koncentracija), poslije koraka vrijedi s = c*d2: sediment prati vodu.
+///
+/// `sNext` i `rate` su pomoćni baferi veličine g.cellCount(); poslije poziva
+/// sNext sadrži stari sediment (zamjena bafera).
+void transportSedimentFlux(Grid& g, const Params& p, Field& sNext, Field& rate);
+
 } // namespace seq
 } // namespace erosion

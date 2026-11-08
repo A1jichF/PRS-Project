@@ -48,7 +48,8 @@ endif()
 # ── Testovi ─────────────────────────────────────────────────────────────────
 if(PRS_BUILD_TESTS)
     enable_testing()
-    add_executable(erosion_tests tests/test_main.cpp tests/test_step1.cpp tests/test_step2_water.cpp tests/test_step4_erosion.cpp)
+    add_executable(erosion_tests tests/test_main.cpp tests/test_step1.cpp tests/test_step2_water.cpp tests/test_step4_erosion.cpp
+                                 tests/test_step5_transport.cpp)
     target_link_libraries(erosion_tests PRIVATE erosion)
     add_test(NAME erosion_tests COMMAND erosion_tests)
 endif()

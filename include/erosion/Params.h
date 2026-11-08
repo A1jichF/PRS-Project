@@ -2,6 +2,17 @@
 
 namespace erosion {
 
+/// Kako sediment putuje s vodom (korak 5).
+enum class SedimentTransport {
+    /// Konzervativno, kroz iste virtualne cijevi kao voda: ćelija šalje susjedu
+    /// isti udio svog sedimenta kao i vode. Masa se čuva tačno.
+    /// Odstupanje od Mei et al. (vidi README, korak 5).
+    Flux,
+    /// Mei et al. 2007: semi-Lagrangian advekcija s(x - v*dt). Ne čuva masu:
+    /// gdje se tok usporava i skuplja (dno padine), sediment nestaje.
+    SemiLagrangian,
+};
+
 /// Parametri simulacije (Mei, Decaudin, Hu 2007: virtual pipe model).
 ///
 /// Razmak ćelija (dužina cijevi l) nije ovdje nego u Grid::cellSize, da ne
@@ -41,6 +52,9 @@ struct Params {
     /// inače radio zbog umjetno velike brzine na ćelijama koje se isprazne
     /// u jednom koraku (u = l / dt). 0 isključuje faktor.
     float maxErosionDepth  = 0.1f;
+
+    // ── Transport sedimenta (korak 5) ────────────────────────────────────────
+    SedimentTransport sedimentTransport = SedimentTransport::Flux;
 
     // ── Termalna erozija (opcionalno) ────────────────────────────────────────
     float talusAngleDeg = 38.0f; ///< Ugao talusa
