@@ -42,6 +42,34 @@ C++20 i CMake. Teren je mreža `N × N` ćelija, a svaka ćelija čuva: visinu t
 3. **OpenMP.** Paralelizacija svakog koraka po redovima mreže (`parallel for`, poređenje `static` i `dynamic` rasporeda). Koristimo double-buffering da nema data race-a između čitanja susjeda i pisanja. Advekcija sedimenta je nepravilan pristup memoriji, pa nju posebno mjerimo. Probat ćemo i blokovsku (tiled) podjelu zbog keša.
 4. **Mjerenja.** Veličine mreže ∈ {256², 512², 1024², 2048²}, niti ∈ {1, 2, 4, 8}, ubrzanje i efikasnost u odnosu na sekvencijalnu verziju, te strong i weak scaling.
 
+## Build i pokretanje
+
+Potrebni su CMake ≥ 3.20 i C++20 kompajler (MSVC, GCC ili Clang). Na Windowsu u Visual Studio Installeru uključite workload **Desktop development with C++** (sadrži i CMake i Ninja).
+
+```sh
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --config Release
+ctest --test-dir build -C Release --output-on-failure
+
+# generiše fBm teren 512 x 512 i upisuje 16-bitni PGM
+build/erosion_cli --size 512 --seed 42 --out terrain.pgm
+build/erosion_cli --help
+```
+
+### Struktura koda
+
+| Putanja | Sadržaj |
+|---|---|
+| [include/erosion/Grid.h](include/erosion/Grid.h) | Stanje mreže (SoA): `b`, `d`, `s`, `fL/fR/fT/fB`, `u`, `v`, poravnato na 64 B. Indeks `y * width + x`. |
+| [include/erosion/Params.h](include/erosion/Params.h) | Parametri simulacije (`dt`, `g`, `A`, `Kc`, `Ks`, `Kd`, `Ke`...). |
+| [include/erosion/TerrainGen.h](include/erosion/TerrainGen.h) | Deterministički fBm generator terena. |
+| [include/erosion/ImageIO.h](include/erosion/ImageIO.h) | Čitanje i pisanje PGM-a (8 i 16 bita). |
+| [include/erosion/Diagnostics.h](include/erosion/Diagnostics.h) | Ukupna masa vode i materijala, min/max, poređenje polja. |
+| [apps/erosion_cli/](apps/erosion_cli/) | Komandna linija: generisanje i učitavanje terena (kasnije i simulacija). |
+| [tests/](tests/) | Testovi bez vanjskih zavisnosti. |
+
+Biblioteka `erosion` ne zavisi ni od kakve grafike, pa se kasnije može uključiti u [opengl-forward-renderer](https://github.com/bakir004/opengl-forward-renderer) kao zasebna scena.
+
 ## Način rada
 
 Svaki korak se provjerava prije sljedećeg:

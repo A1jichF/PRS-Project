@@ -1,0 +1,10 @@
+# Build
+build/
+out/
+cmake-build-*/
+.vs/
+compile_commands.json
+
+# Izlazi simulacije
+*.pgm
+!Izvori/**/*.pgm
