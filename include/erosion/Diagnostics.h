@@ -32,4 +32,19 @@ struct FieldRange {
 /// true ako nijedna vrijednost polja nije NaN ili beskonačna.
 [[nodiscard]] bool allFinite(const Field& f);
 
+struct Params;
+
+struct CflInfo {
+    float maxSpeed = 0.0f; ///< max(|u|, |v|) preko mreže
+    float cfl      = 0.0f; ///< dt * maxSpeed / l; treba ostati ispod 1 (Mei et al.)
+};
+
+/// CFL broj za trenutno polje brzine.
+///
+/// U pipe modelu je CFL po konstrukciji <= 1: K-skaliranje dozvoljava da ćelija
+/// u jednom koraku pošalje najviše svu svoju vodu, i tada je u = l / dt.
+/// CFL = 1 zato znači "ćelija se ispraznila u jednom koraku" (tipično tanak sloj
+/// vode na strmini). Ako se to dešava na mnogo ćelija, dt je prevelik.
+[[nodiscard]] CflInfo velocityCfl(const Grid& g, const Params& p);
+
 } // namespace erosion

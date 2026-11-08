@@ -54,7 +54,28 @@ ctest --test-dir build -C Release --output-on-failure
 # generiše fBm teren 512 x 512 i upisuje 16-bitni PGM
 build/erosion_cli --size 512 --seed 42 --out terrain.pgm
 build/erosion_cli --help
+
+# sloj vode 1 m preko fBm terena, 2000 koraka -> voda se skupi u dolinama
+build/erosion_cli --size 256 --scenario layer --depth 1 --steps 2000 --water-out water.pgm
+
+# dam-break sa snimkom vode svakih 150 koraka (db_000000.pgm, db_000150.pgm, ...)
+build/erosion_cli --size 256 --cell-size 1 --scenario dambreak --steps 600 --snapshot-every 150 --snapshot-prefix db
+
+# kiša i izvor vode (x, y, poluprečnik, količina u sekundi)
+build/erosion_cli --size 256 --rain 0.01 --source 128 40 4 5 --steps 3000
 ```
+
+Na Windowsu s MSYS2 (UCRT64) GCC-om programi se linkuju statički (`-static`), pa rade i kad MSYS2 nije na PATH-u.
+
+### Mjerenje vremena na hibridnim procesorima
+
+Intel procesori od 12. generacije imaju jaka (P) i slabija (E) jezgra. Na i7-1355U je isti sekvencijalni kod na E-jezgru **2,1× sporiji** (82 naspram 39 Mćelija/s na 512²), a Windows sam bira gdje će program raditi. Zato se sekvencijalna mjerenja rade **vezano za P-jezgro**:
+
+```bat
+start /affinity 1 /wait /b build\erosion_cli.exe --size 512 --scenario layer --steps 300
+```
+
+Svako mjerenje ponoviti barem 3 puta i uzeti medijan, s laptopom na punjaču i u režimu "Best performance".
 
 ### Struktura koda
 
@@ -64,7 +85,10 @@ build/erosion_cli --help
 | [include/erosion/Params.h](include/erosion/Params.h) | Parametri simulacije (`dt`, `g`, `A`, `Kc`, `Ks`, `Kd`, `Ke`...). |
 | [include/erosion/TerrainGen.h](include/erosion/TerrainGen.h) | Deterministički fBm generator terena. |
 | [include/erosion/ImageIO.h](include/erosion/ImageIO.h) | Čitanje i pisanje PGM-a (8 i 16 bita). |
-| [include/erosion/Diagnostics.h](include/erosion/Diagnostics.h) | Ukupna masa vode i materijala, min/max, poređenje polja. |
+| [include/erosion/Diagnostics.h](include/erosion/Diagnostics.h) | Ukupna masa vode i materijala, min/max, poređenje polja, CFL. |
+| [include/erosion/Kernels.h](include/erosion/Kernels.h) | Kerneli po fazama (`seq::addWater`, `seq::computeFlux`, `seq::updateWaterAndVelocity`). |
+| [include/erosion/Simulation.h](include/erosion/Simulation.h) | Poziva kernele redom i mjeri vrijeme po fazi. |
+| [include/erosion/Scenarios.h](include/erosion/Scenarios.h) | Početna stanja: mirno jezero, punjenje do nivoa, dam-break. |
 | [apps/erosion_cli/](apps/erosion_cli/) | Komandna linija: generisanje i učitavanje terena (kasnije i simulacija). |
 | [tests/](tests/) | Testovi bez vanjskih zavisnosti. |
 

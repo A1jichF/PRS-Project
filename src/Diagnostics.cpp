@@ -1,6 +1,7 @@
 #include "erosion/Diagnostics.h"
 
 #include "erosion/Grid.h"
+#include "erosion/Params.h"
 
 #include <algorithm>
 #include <cmath>
@@ -49,6 +50,14 @@ double totalMaterial(const Grid& g)
 bool allFinite(const Field& f)
 {
     return std::all_of(f.begin(), f.end(), [](float x) { return std::isfinite(x); });
+}
+
+CflInfo velocityCfl(const Grid& g, const Params& p)
+{
+    float m = 0.0f;
+    for (std::size_t i = 0; i < g.cellCount(); ++i)
+        m = std::max(m, std::max(std::abs(g.u[i]), std::abs(g.v[i])));
+    return {m, p.dt * m / g.cellSize};
 }
 
 } // namespace erosion

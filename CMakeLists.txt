@@ -13,12 +13,22 @@ endif()
 option(PRS_BUILD_APPS  "Build the erosion_cli program" ON)
 option(PRS_BUILD_TESTS "Build the tests"               ON)
 
+# MinGW (MSYS2): statički linkujemo C++ runtime. Inače .exe zavisi od
+# libstdc++-6.dll, a ako je na PATH-u prije MSYS2 neka druga verzija te DLL
+# (npr. iz Git for Windows), program se sruši odmah pri pokretanju.
+if(MINGW)
+    add_link_options(-static)
+endif()
+
 # ── Biblioteka simulacije (bez ikakve zavisnosti od grafike) ────────────────
 add_library(erosion STATIC
     src/Grid.cpp
     src/TerrainGen.cpp
     src/ImageIO.cpp
     src/Diagnostics.cpp
+    src/KernelsSeq.cpp
+    src/Scenarios.cpp
+    src/Simulation.cpp
 )
 target_include_directories(erosion PUBLIC include)
 target_compile_features(erosion PUBLIC cxx_std_20)
@@ -38,7 +48,7 @@ endif()
 # ── Testovi ─────────────────────────────────────────────────────────────────
 if(PRS_BUILD_TESTS)
     enable_testing()
-    add_executable(erosion_tests tests/test_main.cpp tests/test_step1.cpp)
+    add_executable(erosion_tests tests/test_main.cpp tests/test_step1.cpp tests/test_step2_water.cpp)
     target_link_libraries(erosion_tests PRIVATE erosion)
     add_test(NAME erosion_tests COMMAND erosion_tests)
 endif()

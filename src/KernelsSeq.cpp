@@ -1,0 +1,130 @@
+#include "erosion/Grid.h"
+#include "erosion/Kernels.h"
+#include "erosion/Params.h"
+
+#include <algorithm>
+
+namespace erosion::seq {
+
+void addWater(Grid& g, const Params& p, std::span<const WaterSource> sources)
+{
+    if (p.rainRate != 0.0f) {
+        const float add = p.dt * p.rainRate;
+        for (float& d : g.d)
+            d += add;
+    }
+
+    for (const WaterSource& src : sources) {
+        const float add = p.dt * src.rate;
+        const float r2  = src.radius * src.radius;
+        const int   r   = static_cast<int>(src.radius) + 1;
+        const int   x0  = std::max(0, src.x - r);
+        const int   x1  = std::min(g.width - 1, src.x + r);
+        const int   y0  = std::max(0, src.y - r);
+        const int   y1  = std::min(g.height - 1, src.y + r);
+        for (int y = y0; y <= y1; ++y) {
+            for (int x = x0; x <= x1; ++x) {
+                const float dx = static_cast<float>(x - src.x);
+                const float dy = static_cast<float>(y - src.y);
+                if (dx * dx + dy * dy <= r2)
+                    g.d[g.idx(x, y)] += add;
+            }
+        }
+    }
+}
+
+void computeFlux(Grid& g, const Params& p)
+{
+    const int    W        = g.width;
+    const int    H        = g.height;
+    const float  l        = g.cellSize;
+    const float  cellArea = l * l;
+    const float  k        = p.dt * p.pipeArea * p.gravity / l;
+    const float* b        = g.b.data();
+    const float* d        = g.d.data();
+    float*       fL       = g.fL.data();
+    float*       fR       = g.fR.data();
+    float*       fT       = g.fT.data();
+    float*       fB       = g.fB.data();
+
+    for (int y = 0; y < H; ++y) {
+        for (int x = 0; x < W; ++x) {
+            const std::size_t i = g.idx(x, y);
+            const float       h = b[i] + d[i];
+
+            // Zatvoreni rubovi: prema van mreže nema cijevi.
+            float l_ = 0.0f, r_ = 0.0f, t_ = 0.0f, b_ = 0.0f;
+            if (x > 0)     l_ = std::max(0.0f, fL[i] + k * (h - (b[i - 1] + d[i - 1])));
+            if (x < W - 1) r_ = std::max(0.0f, fR[i] + k * (h - (b[i + 1] + d[i + 1])));
+            if (y > 0)     t_ = std::max(0.0f, fT[i] + k * (h - (b[i - W] + d[i - W])));
+            if (y < H - 1) b_ = std::max(0.0f, fB[i] + k * (h - (b[i + W] + d[i + W])));
+
+            // Ćelija ne smije poslati više vode nego što ima: Σf * dt <= d * l².
+            const float sum = l_ + r_ + t_ + b_;
+            if (sum > 0.0f) {
+                const float K = std::min(1.0f, d[i] * cellArea / (sum * p.dt));
+                l_ *= K;
+                r_ *= K;
+                t_ *= K;
+                b_ *= K;
+            }
+
+            fL[i] = l_;
+            fR[i] = r_;
+            fT[i] = t_;
+            fB[i] = b_;
+        }
+    }
+}
+
+void updateWaterAndVelocity(Grid& g, const Params& p)
+{
+    const int    W           = g.width;
+    const int    H           = g.height;
+    const float  l           = g.cellSize;
+    const float  invCellArea = 1.0f / (l * l);
+    const float* fL          = g.fL.data();
+    const float* fR          = g.fR.data();
+    const float* fT          = g.fT.data();
+    const float* fB          = g.fB.data();
+    float*       d           = g.d.data();
+    float*       u           = g.u.data();
+    float*       v           = g.v.data();
+
+    for (int y = 0; y < H; ++y) {
+        for (int x = 0; x < W; ++x) {
+            const std::size_t i = g.idx(x, y);
+
+            // Dolazni fluks: šta susjedi šalju prema ovoj ćeliji.
+            const float inL = x > 0     ? fR[i - 1] : 0.0f; // lijevi susjed šalje desno
+            const float inR = x < W - 1 ? fL[i + 1] : 0.0f; // desni susjed šalje lijevo
+            const float inT = y > 0     ? fB[i - W] : 0.0f; // gornji susjed šalje dolje
+            const float inB = y < H - 1 ? fT[i + W] : 0.0f; // donji susjed šalje gore
+
+            const float inflow  = inL + inR + inT + inB;
+            const float outflow = fL[i] + fR[i] + fT[i] + fB[i];
+
+            const float d1 = d[i];
+            // K-skaliranje garantuje d2 >= 0 u egzaktnoj aritmetici; max uklanja
+            // samo grešku zaokruživanja reda 1e-7.
+            const float d2 = std::max(0.0f, d1 + p.dt * (inflow - outflow) * invCellArea);
+            d[i] = d2;
+
+            // Prosječan protok kroz ćeliju po x i y (Mei et al., jednačine 8–9).
+            const float dWX  = 0.5f * (inL - fL[i] + fR[i] - inR);
+            const float dWY  = 0.5f * (inT - fT[i] + fB[i] - inB);
+            const float dBar = 0.5f * (d1 + d2);
+
+            if (dBar > p.minDepthForVelocity) {
+                const float inv = 1.0f / (l * dBar);
+                u[i] = dWX * inv;
+                v[i] = dWY * inv;
+            } else {
+                u[i] = 0.0f;
+                v[i] = 0.0f;
+            }
+        }
+    }
+}
+
+} // namespace erosion::seq
