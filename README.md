@@ -156,6 +156,7 @@ Detalji (DLL, kontrole, šta se dešava u svakom frameu): [docs/erosion.md u for
 |---|---|
 | [include/erosion/Grid.h](include/erosion/Grid.h) | Stanje mreže (SoA): `b`, `d`, `s`, `fL/fR/fT/fB`, `u`, `v`, `r` (stijena), poravnato na 64 B. Indeks `y * width + x`. |
 | [include/erosion/Params.h](include/erosion/Params.h) | Parametri simulacije (`dt`, `g`, `A`, `Kc`, `Ks`, `Kd`, `Ke`...). |
+| [include/erosion/Bedrock.h](include/erosion/Bedrock.h) | Zadavanje stijene (isti sloj tla, sloj po ćeliji, do zadane visine, proizvoljna mapa) i statistika tla. |
 | [include/erosion/TerrainGen.h](include/erosion/TerrainGen.h) | Deterministički fBm generator terena. |
 | [include/erosion/ImageIO.h](include/erosion/ImageIO.h) | Čitanje i pisanje PGM-a (8 i 16 bita). |
 | [include/erosion/Diagnostics.h](include/erosion/Diagnostics.h) | Ukupna masa vode i materijala, min/max, poređenje polja, CFL. |
@@ -216,6 +217,8 @@ nema dovoljno tla:     iz stijene se uzima (Δ − (b − r)) · rockErodibility
 - Depozicija ne mijenja `r`: nataloženi materijal je novo tlo iznad stijene i može se ponovo odnijeti.
 - Uvijek vrijedi `b ≥ r`, a ukupni materijal se i dalje čuva.
 - Dok stijena nije zadana (`r = kNoBedrock`), rezultati su bit-identični verziji bez stijene; to provjerava [tests/test_golden.cpp](tests/test_golden.cpp).
+
+Stijena se zadaje funkcijama iz [Bedrock.h](include/erosion/Bedrock.h), poslije terena: `setBedrockUniformSoil` (isti sloj tla svuda), `setBedrockFromSoilDepth` (debljina tla po ćeliji), `setBedrockLevel` (stijena do zadane visine) i `setBedrockHeights` (proizvoljna mapa). Sve garantuju `r ≤ b`.
 
 Ćelija čita i piše samo vlastito `r`, pa kernel erozije nema novih zavisnosti između ćelija (važno za OpenMP/SIMD).
 

@@ -23,6 +23,7 @@ endif()
 # ── Biblioteka simulacije (bez ikakve zavisnosti od grafike) ────────────────
 add_library(erosion STATIC
     src/Grid.cpp
+    src/Bedrock.cpp
     src/TerrainGen.cpp
     src/ImageIO.cpp
     src/Diagnostics.cpp

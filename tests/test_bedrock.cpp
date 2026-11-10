@@ -2,6 +2,7 @@
 
 #include "TestFramework.h"
 
+#include "erosion/Bedrock.h"
 #include "erosion/Diagnostics.h"
 #include "erosion/Grid.h"
 #include "erosion/Kernels.h"
@@ -13,6 +14,7 @@
 #include <cmath>
 #include <cstdint>
 #include <iterator>
+#include <limits>
 
 using namespace erosion;
 
@@ -373,4 +375,124 @@ TEST(stijena_korito_od_stijene_se_ne_pomjera_dok_voda_tece)
     CHECK(maxAbsDiff(out.r, b0) == 0.0f);
     CHECK(fieldRange(out.s).max == 0.0f);
     CHECK(fieldRange(out.u).max > 0.5f); // voda zaista teče niz kosinu
+}
+
+// ── Zadavanje stijene (Bedrock.h) ────────────────────────────────────────────
+
+namespace {
+
+const float kNaN = std::numeric_limits<float>::quiet_NaN();
+const float kInf = std::numeric_limits<float>::infinity();
+
+/// 4 x 1 mreža s visinama terena 1, 2, 3, 4 (l = 2).
+Grid stairs()
+{
+    Grid g(4, 1, 2.0f);
+    for (int x = 0; x < 4; ++x)
+        g.b[g.idx(x, 0)] = static_cast<float>(x + 1);
+    return g;
+}
+
+} // namespace
+
+TEST(stijena_isti_sloj_tla_svuda)
+{
+    Grid g = stairs();
+    CHECK(!hasBedrock(g));
+
+    setBedrockUniformSoil(g, 0.5f);
+    CHECK(hasBedrock(g));
+    for (int x = 0; x < 4; ++x)
+        CHECK(g.r[g.idx(x, 0)] == g.b[g.idx(x, 0)] - 0.5f);
+
+    setBedrockUniformSoil(g, -3.0f); // negativno = 0 = gola stijena
+    CHECK(maxAbsDiff(g.r, g.b) == 0.0f);
+
+    setBedrockUniformSoil(g, kInf); // beskonačno tlo = nema stijene
+    CHECK(!hasBedrock(g));
+    setBedrockUniformSoil(g, 0.5f);
+    setBedrockUniformSoil(g, kNaN);
+    CHECK(!hasBedrock(g));
+}
+
+TEST(stijena_sloj_tla_po_celiji)
+{
+    Grid        g       = stairs();
+    const float depth[] = {0.0f, 0.25f, -1.0f, kNaN};
+    setBedrockFromSoilDepth(g, depth);
+    CHECK(g.r[0] == 1.0f);       // gola stijena
+    CHECK(g.r[1] == 1.75f);
+    CHECK(g.r[2] == 3.0f);       // negativno = gola stijena
+    CHECK(g.r[3] == kNoBedrock); // NaN = nema stijene
+    CHECK(allFinite(g.r));
+}
+
+TEST(stijena_do_zadane_visine)
+{
+    Grid g = stairs();
+    setBedrockLevel(g, 2.5f);
+    CHECK(g.r[0] == 1.0f); // ispod nivoa: gola stijena
+    CHECK(g.r[1] == 2.0f);
+    CHECK(g.r[2] == 2.5f); // iznad nivoa: tlo 0.5
+    CHECK(g.r[3] == 2.5f); // tlo 1.5
+
+    setBedrockLevel(g, kNaN);
+    CHECK(!hasBedrock(g));
+    setBedrockLevel(g, 2.5f);
+    setBedrockLevel(g, -kInf);
+    CHECK(!hasBedrock(g));
+}
+
+TEST(stijena_proizvoljna_mapa_se_ogranicava_na_teren)
+{
+    Grid        g         = stairs();
+    const float heights[] = {0.5f, 9.0f, kInf, 3.5f};
+    setBedrockHeights(g, heights);
+    CHECK(g.r[0] == 0.5f);
+    CHECK(g.r[1] == 2.0f);       // stijena iznad terena se spušta na teren
+    CHECK(g.r[2] == kNoBedrock); // beskonačno = nema stijene
+    CHECK(g.r[3] == 3.5f);
+    for (std::size_t i = 0; i < g.cellCount(); ++i)
+        CHECK(g.r[i] <= g.b[i]);
+
+    clearBedrock(g);
+    CHECK(!hasBedrock(g));
+}
+
+TEST(stijena_statistika_tla)
+{
+    Grid g = stairs();
+    CHECK(bedrockStats(g).rockCells == 0);
+    CHECK(bedrockStats(g).soilVolume == 0.0);
+
+    const float depth[] = {0.0f, 0.25f, 1.0f, kNaN};
+    setBedrockFromSoilDepth(g, depth);
+    const BedrockStats st = bedrockStats(g);
+    CHECK(st.rockCells == 3); // ćelija bez stijene se ne broji
+    CHECK(st.bareCells == 1);
+    CHECK_NEAR(st.soilVolume, (0.25 + 1.0) * 4.0, 1e-9); // l² = 4
+    CHECK(bedrockStats(g, 0.3f).bareCells == 2);         // prag za "golo"
+}
+
+TEST(stijena_zadana_slojem_tla_ogranicava_simulaciju)
+{
+    // Isti scenarij kao gore, ali stijena zadana funkcijom iz Bedrock.h:
+    // tla ukupno može nestati najviše onoliko koliko ga je bilo.
+    Grid g = rainyTerrain();
+    setBedrockUniformSoil(g, kSoil);
+    const BedrockStats before = bedrockStats(g);
+    CHECK(before.bareCells == 0);
+
+    Params p;
+    p.rainRate = 0.02f;
+    Simulation sim(std::move(g), p);
+    sim.run(kSteps);
+
+    const BedrockStats after = bedrockStats(sim.grid());
+    CHECK(after.rockCells == before.rockCells);
+    CHECK(after.bareCells > 0);
+    // Tlo se seli (erozija + taloženje), a dio je u vodi kao sediment.
+    const double l2        = 4.0;
+    const double suspended = fieldSum(sim.grid().s) * l2;
+    CHECK(relErr(after.soilVolume + suspended, before.soilVolume) < 1e-3);
 }
