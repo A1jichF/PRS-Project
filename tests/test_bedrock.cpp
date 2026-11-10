@@ -9,6 +9,8 @@
 #include "erosion/Simulation.h"
 #include "erosion/TerrainGen.h"
 
+#include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <iterator>
 
@@ -95,7 +97,7 @@ TEST(stijena_se_ne_poklapa_s_pomocnim_baferima_simulacije)
 
 TEST(stijena_simulacija_je_ne_mijenja)
 {
-    // Dok kernel erozije ne koristi stijenu, r ostaje netaknuto kroz simulaciju.
+    // Uz zadanu tvrdoću (rockErodibility = 0) simulacija nikad ne mijenja r.
     Grid g(48, 48, 2.0f);
     generateFbmTerrain(g, FbmSettings{}, 80.0f);
     for (std::size_t i = 0; i < g.cellCount(); ++i)
@@ -107,4 +109,268 @@ TEST(stijena_simulacija_je_ne_mijenja)
     Simulation sim(std::move(g), p);
     sim.run(100);
     CHECK(maxAbsDiff(sim.grid().r, r0) == 0.0f);
+}
+
+// ── Kernel erozije sa stijenom: jedna ćelija ─────────────────────────────────
+//
+// Ista ćelija kao u test_step4_erosion.cpp: 3 x 3, l = 1, teren b = 2x, u
+// centru brzina (3, 4), d = 1. Kapacitet C = 0.5 * (2/sqrt(5)) * 5 = 2.236068,
+// ks = Ks*dt = 0.01, pa uz s = 0.5 erozija "želi" 0.01 * (C - 0.5) = 0.01736068.
+
+namespace {
+
+constexpr double kWanted = 0.01736068;
+
+Grid slopeCell(float s0)
+{
+    Grid g(3, 3, 1.0f);
+    for (int y = 0; y < 3; ++y)
+        for (int x = 0; x < 3; ++x)
+            g.b[g.idx(x, y)] = 2.0f * static_cast<float>(x);
+    const std::size_t c = g.idx(1, 1);
+    g.u[c] = 3.0f;
+    g.v[c] = 4.0f;
+    g.d[c] = 1.0f;
+    g.s[c] = s0;
+    return g;
+}
+
+/// Jedan poziv kernela erozije; vraća mrežu poslije.
+Grid erodeOnce(Grid g, const Params& p)
+{
+    Field scratch(g.cellCount());
+    seq::erodeDeposit(g, p, scratch);
+    return g;
+}
+
+double relErr(double actual, double expected)
+{
+    return std::abs(actual - expected) / std::abs(expected);
+}
+
+} // namespace
+
+TEST(stijena_gola_stijena_se_ne_erodira)
+{
+    Grid g = slopeCell(0.5f);
+    const std::size_t c = g.idx(1, 1);
+    g.r[c] = g.b[c]; // nema tla
+
+    const Grid out = erodeOnce(g, Params{});
+    CHECK(out.b[c] == 2.0f);
+    CHECK(out.r[c] == 2.0f);
+    CHECK(out.s[c] == 0.5f);
+}
+
+TEST(stijena_tanko_tlo_se_odnese_tacno_do_stijene)
+{
+    Grid g = slopeCell(0.5f);
+    const std::size_t c = g.idx(1, 1);
+    g.r[c] = 1.995f; // 0.005 tla, a erozija želi 0.0174
+
+    const Grid out = erodeOnce(g, Params{});
+    CHECK(out.b[c] == 1.995f); // tačno na stijeni, ne ispod
+    CHECK(out.r[c] == 1.995f);
+    CHECK_NEAR(out.s[c], 0.5 + 0.005, 1e-6);
+}
+
+TEST(stijena_duboko_tlo_ne_mijenja_eroziju)
+{
+    // Dok ima dovoljno tla, rezultat je bit-identičan onome bez stijene.
+    Grid g = slopeCell(0.5f);
+    const std::size_t c = g.idx(1, 1);
+    const Grid noRock = erodeOnce(g, Params{});
+
+    g.r[c] = 1.0f; // 1 m tla
+    const Grid out = erodeOnce(g, Params{});
+    CHECK(out.b[c] == noRock.b[c]);
+    CHECK(out.s[c] == noRock.s[c]);
+    CHECK(out.r[c] == 1.0f);
+    CHECK_NEAR(out.b[c], 2.0 - kWanted, 1e-6);
+}
+
+TEST(stijena_tvrdoca_usporava_eroziju_stijene)
+{
+    Grid g = slopeCell(0.5f);
+    const std::size_t c = g.idx(1, 1);
+    g.r[c] = g.b[c];
+
+    Params p;
+    p.rockErodibility = 0.25f;
+    const Grid out = erodeOnce(g, p);
+    CHECK_NEAR(out.r[c], 2.0 - 0.25 * kWanted, 1e-6);
+    CHECK(out.b[c] == out.r[c]); // stijena ostaje gola
+    CHECK_NEAR(out.s[c], 0.5 + 0.25 * kWanted, 1e-6);
+}
+
+TEST(stijena_prvo_tlo_pa_stijena)
+{
+    // 0.005 tla, tvrdoća 0.5: cijelo tlo + polovina ostatka iz stijene.
+    Grid g = slopeCell(0.5f);
+    const std::size_t c = g.idx(1, 1);
+    g.r[c] = 1.995f;
+
+    Params p;
+    p.rockErodibility = 0.5f;
+    const Grid   out      = erodeOnce(g, p);
+    const double fromRock = 0.5 * (kWanted - 0.005);
+    CHECK_NEAR(out.r[c], 1.995 - fromRock, 1e-6);
+    CHECK(out.b[c] == out.r[c]);
+    CHECK_NEAR(out.s[c], 0.5 + 0.005 + fromRock, 1e-6);
+}
+
+TEST(stijena_tvrdoca_se_ogranicava_na_0_1)
+{
+    Grid g = slopeCell(0.5f);
+    const std::size_t c = g.idx(1, 1);
+    g.r[c] = g.b[c];
+
+    Params p;
+    p.rockErodibility = 1.0f;
+    const Grid asSoil = erodeOnce(g, p);
+    p.rockErodibility = 7.0f;
+    CHECK(erodeOnce(g, p).b[c] == asSoil.b[c]);
+    p.rockErodibility = -3.0f;
+    CHECK(erodeOnce(g, p).b[c] == 2.0f);
+
+    // Tvrdoća 1: stijena se erodira jednako kao tlo.
+    CHECK_NEAR(asSoil.b[c], 2.0 - kWanted, 1e-6);
+}
+
+TEST(stijena_talog_na_stijeni_se_opet_moze_odnijeti)
+{
+    // s > C: sediment se taloži na golu stijenu kao novo tlo, r se ne mijenja.
+    Grid g = slopeCell(3.0f);
+    const std::size_t c = g.idx(1, 1);
+    g.r[c] = g.b[c];
+
+    Field scratch(g.cellCount());
+    seq::erodeDeposit(g, Params{}, scratch);
+    CHECK(g.b[c] > 2.0f);
+    CHECK(g.r[c] == 2.0f);
+
+    // Čista voda zatim odnese talog, ali samo do stijene.
+    for (int i = 0; i < 5; ++i) {
+        g.s[c] = 0.0f;
+        seq::erodeDeposit(g, Params{}, scratch);
+    }
+    CHECK(g.b[c] == 2.0f);
+    CHECK(g.r[c] == 2.0f);
+}
+
+TEST(stijena_iznad_povrsine_ne_stvara_materijal)
+{
+    // Neispravan ulaz (r > b): stijena se računa od površine, teren se ne diže.
+    Grid g = slopeCell(0.5f);
+    const std::size_t c = g.idx(1, 1);
+    g.r[c] = 5.0f;
+
+    const Grid out = erodeOnce(g, Params{});
+    CHECK(out.b[c] == 2.0f);
+    CHECK(out.r[c] == 2.0f);
+    CHECK(out.s[c] == 0.5f);
+}
+
+// ── Cijela simulacija ────────────────────────────────────────────────────────
+
+namespace {
+
+/// fBm 96 x 96 s 1 m vode i kišom; isti scenarij sa i bez stijene.
+Grid rainyTerrain()
+{
+    Grid g(96, 96, 2.0f);
+    generateFbmTerrain(g, FbmSettings{}, 80.0f);
+    fillConstant(g.d, 1.0f);
+    return g;
+}
+
+constexpr float kSoil  = 0.05f;
+constexpr int   kSteps = 1500;
+
+} // namespace
+
+TEST(stijena_teren_nikad_ne_ide_ispod_stijene)
+{
+    Grid g = rainyTerrain();
+    const Field b0 = g.b;
+    for (std::size_t i = 0; i < g.cellCount(); ++i)
+        g.r[i] = g.b[i] - kSoil;
+    const Field  r0 = g.r;
+    const double m0 = totalMaterial(g);
+
+    Params p;
+    p.rainRate = 0.02f;
+    Simulation sim(g, p);
+    sim.run(kSteps);
+    const Grid& out = sim.grid();
+
+    std::size_t bare      = 0;
+    bool        aboveRock = true;
+    for (std::size_t i = 0; i < out.cellCount(); ++i) {
+        aboveRock = aboveRock && out.b[i] >= out.r[i];
+        bare += out.b[i] == out.r[i] ? 1 : 0;
+    }
+    CHECK(aboveRock);
+    CHECK(maxAbsDiff(out.r, r0) == 0.0f); // tvrdoća 0: stijena netaknuta
+    CHECK(bare > 0);                      // erozija je negdje stvarno došla do stijene
+    CHECK(relErr(totalMaterial(out), m0) < 1e-5);
+
+    // Test ima smisla samo ako bi bez stijene erozija išla dublje od sloja tla.
+    Simulation noRock(rainyTerrain(), p);
+    noRock.run(kSteps);
+    float deepest = 0.0f;
+    for (std::size_t i = 0; i < b0.size(); ++i)
+        deepest = std::min(deepest, noRock.grid().b[i] - b0[i]);
+    CHECK(deepest < -2.0f * kSoil);
+}
+
+TEST(stijena_meka_stijena_se_spusta_ali_ostaje_ispod_terena)
+{
+    Grid g = rainyTerrain();
+    for (std::size_t i = 0; i < g.cellCount(); ++i)
+        g.r[i] = g.b[i] - kSoil;
+    const Field  r0 = g.r;
+    const double m0 = totalMaterial(g);
+
+    Params p;
+    p.rainRate        = 0.02f;
+    p.rockErodibility = 0.1f;
+    Simulation sim(std::move(g), p);
+    sim.run(kSteps);
+    const Grid& out = sim.grid();
+
+    bool  aboveRock = true, rockOnlyDown = true;
+    float maxRockDrop = 0.0f;
+    for (std::size_t i = 0; i < out.cellCount(); ++i) {
+        aboveRock    = aboveRock && out.b[i] >= out.r[i];
+        rockOnlyDown = rockOnlyDown && out.r[i] <= r0[i];
+        maxRockDrop  = std::max(maxRockDrop, r0[i] - out.r[i]);
+    }
+    CHECK(aboveRock);
+    CHECK(rockOnlyDown);
+    CHECK(maxRockDrop > 0.0f);
+    CHECK(relErr(totalMaterial(out), m0) < 1e-5);
+}
+
+TEST(stijena_korito_od_stijene_se_ne_pomjera_dok_voda_tece)
+{
+    // Kosina od gole stijene s izvorom na vrhu: voda teče, a teren ostaje
+    // bit-identičan (nema ni erozije ni sedimenta koji bi se taložio).
+    const int W = 96, H = 32;
+    Grid g(W, H, 1.0f);
+    for (int y = 0; y < H; ++y)
+        for (int x = 0; x < W; ++x)
+            g.b[g.idx(x, y)] = 0.3f * static_cast<float>(std::max(0, 64 - x));
+    g.r = g.b;
+    const Field b0 = g.b;
+
+    Simulation sim(std::move(g));
+    sim.addSource({4, H / 2, 3.0f, 3.0f});
+    sim.run(3000);
+    const Grid& out = sim.grid();
+
+    CHECK(maxAbsDiff(out.b, b0) == 0.0f);
+    CHECK(maxAbsDiff(out.r, b0) == 0.0f);
+    CHECK(fieldRange(out.s).max == 0.0f);
+    CHECK(fieldRange(out.u).max > 0.5f); // voda zaista teče niz kosinu
 }

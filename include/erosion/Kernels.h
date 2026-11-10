@@ -51,6 +51,12 @@ void updateWaterAndVelocity(Grid& g, const Params& p);
 ///   C > s: b -= Ks*dt*(C - s), s += isto     (erozija)
 ///   C ≤ s: b += Kd*dt*(s - C), s -= isto     (depozicija)
 ///
+/// Stijena (Grid::r): erozija uzima najviše sloj tla b - r. Ostatak tražene
+/// količine se uzima iz stijene pomnožen s Params::rockErodibility (0 = ništa),
+/// i tada se spuštaju i b i r. Depozicija ne dira r: nataloženi materijal je
+/// novo tlo iznad stijene. Uvijek vrijedi b >= r. Polje r se mijenja u mjestu
+/// (čita se i piše samo vlastita ćelija).
+///
 /// Double-buffering: nagib se računa iz STAROG terena susjeda, pa se novi teren
 /// piše u `bNext`, a na kraju se g.b i bNext zamijene (O(1), samo pokazivači).
 /// Tako rezultat ne zavisi od redoslijeda obrade ćelija. `bNext` mora imati

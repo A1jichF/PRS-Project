@@ -55,6 +55,13 @@ struct Params {
     /// na 0.1 daje 6–8× manje jama (numeričkih artefakata), za svaki dt.
     float maxErosionDepth  = 0.5f;
 
+    // ── Stijena (bedrock, Grid::r) ───────────────────────────────────────────
+    /// Tvrdoća stijene kao udio u [0, 1]: koliko se brzo erodira stijena u
+    /// odnosu na tlo. 0 = stijena se ne može erodirati (zadano); 0.05 = 20×
+    /// sporije od tla (rijeka polako usijeca kanjon); 1 = isto kao tlo.
+    /// Nema uticaja dok stijena nije zadana (Grid::r == kNoBedrock).
+    float rockErodibility = 0.0f;
+
     // ── Transport sedimenta (korak 5) ────────────────────────────────────────
     SedimentTransport sedimentTransport = SedimentTransport::Flux;
 

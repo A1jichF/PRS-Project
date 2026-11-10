@@ -144,6 +144,8 @@ void erodeDeposit(Grid& g, const Params& p, Field& bNext)
     const float  minTilt  = p.minTilt;
     const float  capacity = p.sedimentCapacity;
     const float  invMaxDepth = p.maxErosionDepth > 0.0f ? 1.0f / p.maxErosionDepth : 0.0f;
+    const float  rockK = std::clamp(p.rockErodibility, 0.0f, 1.0f);
+    float*       r  = g.r.data();
     const float* b  = g.b.data();
     const float* d  = g.d.data();
     const float* u  = g.u.data();
@@ -174,9 +176,25 @@ void erodeDeposit(Grid& g, const Params& p, Field& bNext)
             const float C     = capacity * sinA * speed * lmax;
 
             if (C > s[i]) {
-                const float amount = ks * (C - s[i]);
-                bn[i] = b[i] - amount;
-                s[i] += amount;
+                // Voda prvo odnosi tlo iznad stijene (debljine b - r). Stijena
+                // nikad nije iznad površine: ako je zadana viša, računa se od b.
+                const float wanted = ks * (C - s[i]);
+                const float rock   = std::min(r[i], b[i]);
+                const float soil   = b[i] - rock;
+                if (wanted < soil) {
+                    // Ima dovoljno tla (uvijek tako kad nema stijene).
+                    bn[i] = b[i] - wanted;
+                    s[i] += wanted;
+                } else {
+                    // Tlo je odneseno do kraja; ostatak ide iz stijene, usporen
+                    // tvrdoćom (rockK = 0: stijena se ne erodira). Novi teren
+                    // se postavlja TAČNO na novu stijenu, da uvijek vrijedi b >= r.
+                    const float fromRock = (wanted - soil) * rockK;
+                    const float rockNew  = rock - fromRock;
+                    r[i]  = rockNew;
+                    bn[i] = rockNew;
+                    s[i] += soil + fromRock;
+                }
             } else {
                 const float amount = kd * (s[i] - C);
                 bn[i] = b[i] + amount;

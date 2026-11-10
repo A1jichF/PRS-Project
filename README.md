@@ -154,7 +154,7 @@ Detalji (DLL, kontrole, šta se dešava u svakom frameu): [docs/erosion.md u for
 
 | Putanja | Sadržaj |
 |---|---|
-| [include/erosion/Grid.h](include/erosion/Grid.h) | Stanje mreže (SoA): `b`, `d`, `s`, `fL/fR/fT/fB`, `u`, `v`, poravnato na 64 B. Indeks `y * width + x`. |
+| [include/erosion/Grid.h](include/erosion/Grid.h) | Stanje mreže (SoA): `b`, `d`, `s`, `fL/fR/fT/fB`, `u`, `v`, `r` (stijena), poravnato na 64 B. Indeks `y * width + x`. |
 | [include/erosion/Params.h](include/erosion/Params.h) | Parametri simulacije (`dt`, `g`, `A`, `Kc`, `Ks`, `Kd`, `Ke`...). |
 | [include/erosion/TerrainGen.h](include/erosion/TerrainGen.h) | Deterministički fBm generator terena. |
 | [include/erosion/ImageIO.h](include/erosion/ImageIO.h) | Čitanje i pisanje PGM-a (8 i 16 bita). |
@@ -199,6 +199,25 @@ Uz `Kdmax = 0,5` erozija se skuplja u jasne kanale umjesto da se razlije po padi
 ### Transport sedimenta
 
 Konzervativni transport šalje susjedu isti udio sedimenta kao i vode (isti fluks iz faze 2), pa se masa čuva do greške zaokruživanja, a sediment se taloži nizvodno. Kao i update vode, to je stencil s 4 susjeda (gather, bez konflikta pisanja), pa se jednako dobro paralelizuje. Semi-Lagrangian ostaje u kodu za poređenje, a njegov nepravilan pristup memoriji je zanimljiv za SIMD/OpenMP analizu.
+
+### Stijena (bedrock)
+
+Proširenje u odnosu na Mei et al., po uzoru na slojeviti teren (Beneš i Forsbach 2001; Šťava et al. 2008). Uz visinu terena `b` mreža ima i polje `r`, visinu vrha stijene. Između njih je sloj tla debljine `b − r`:
+
+```
+erozija želi:  Δ = Ks·dt·(C − s)
+ima tla (Δ < b − r):   b −= Δ,  s += Δ
+nema dovoljno tla:     iz stijene se uzima (Δ − (b − r)) · rockErodibility
+                       b i r se spuštaju na novu visinu stijene, s raste za odneseno
+```
+
+- `rockErodibility = 0` (zadano): stijena se ne može erodirati. Gdje je `r = b` (gola stijena), voda teče, a dno se ne mijenja, pa tako nastaje stalno riječno korito.
+- `rockErodibility` između 0 i 1: stijena se erodira toliko puta sporije od tla (npr. 0,05 = 20× sporije), pa rijeka polako usijeca kanjon.
+- Depozicija ne mijenja `r`: nataloženi materijal je novo tlo iznad stijene i može se ponovo odnijeti.
+- Uvijek vrijedi `b ≥ r`, a ukupni materijal se i dalje čuva.
+- Dok stijena nije zadana (`r = kNoBedrock`), rezultati su bit-identični verziji bez stijene; to provjerava [tests/test_golden.cpp](tests/test_golden.cpp).
+
+Ćelija čita i piše samo vlastito `r`, pa kernel erozije nema novih zavisnosti između ćelija (važno za OpenMP/SIMD).
 
 ## Način rada
 
