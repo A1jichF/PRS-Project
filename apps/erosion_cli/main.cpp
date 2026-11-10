@@ -1,6 +1,7 @@
 // erosion_cli: pravi početno stanje (teren + voda), pokreće simulaciju,
 // ispisuje mjerenja i upisuje rezultate kao PGM.
 
+#include "erosion/Bedrock.h"
 #include "erosion/Diagnostics.h"
 #include "erosion/Grid.h"
 #include "erosion/ImageIO.h"
@@ -15,6 +16,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <exception>
+#include <limits>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -46,6 +48,8 @@ void printUsage()
         "  layer               sloj vode --depth svuda preko terena\n"
         "  lake                voda do nivoa --level (mirno jezero)\n"
         "  dambreak            ravan teren, voda --depth i stub 3*depth u centru\n"
+        "  river               dolina s vijugavim koritom od stijene, izvorom na vrhu\n"
+        "                      i bazenom na dnu (teren se ne generiše iz fBm-a)\n"
         "  --depth D           dubina za layer/dambreak (zadano 1)\n"
         "  --level L           nivo vode za lake (zadano heightScale/2)\n"
         "\n"
@@ -56,6 +60,16 @@ void printUsage()
         "  --evaporation K     udio vode koji ispari u sekundi (zadano 0.015, 0 = bez)\n"
         "  --source X Y R Q    izvor vode u (X, Y), poluprečnik R, Q po sekundi\n"
         "                      (može se ponoviti)\n"
+        "\n"
+        "Stijena (bedrock); zadaje se poslije terena, redom kako je navedeno:\n"
+        "  --soil-depth D      isti sloj tla debljine D svuda iznad stijene\n"
+        "                      (za river: debljina tla izvan korita, zadano 1.5)\n"
+        "  --rock-level L      stijena do visine L (ispod L je gola stijena)\n"
+        "  --bedrock file.pgm  mapa visina stijene (skalirana s --height-scale)\n"
+        "  --no-bedrock        ukloni stijenu (npr. river bez stijene, za poređenje)\n"
+        "  --rock-erodibility K  tvrdoća: 0 = stijena se ne erodira (zadano),\n"
+        "                      0.05 = 20x sporije od tla, 1 = kao tlo\n"
+        "  --river-rate Q      jačina izvora za river (zadano 0.6)\n"
         "\n"
         "Erozija:\n"
         "  --no-erosion        isključi eroziju i depoziciju\n"
@@ -72,6 +86,7 @@ void printUsage()
         "  --diff-out f.pgm    promjena terena b - b0 (sivo = bez promjene,\n"
         "                      tamno = erozija, svijetlo = taloženje)\n"
         "  --sediment-out f    sediment u vodi\n"
+        "  --soil-out f.pgm    debljina tla iznad stijene (crno = gola stijena)\n"
         "  --snapshot-every K  upiši vodu svakih K koraka kao <prefix>_NNNNNN.pgm\n"
         "  --snapshot-prefix P (zadano water)\n"
         "  --8bit              8-bitni PGM (zadano 16-bitni)\n"
@@ -81,7 +96,7 @@ void printUsage()
         "  --help");
 }
 
-enum class Scenario { Fbm, Layer, Lake, DamBreak };
+enum class Scenario { Fbm, Layer, Lake, DamBreak, River };
 
 Scenario parseScenario(std::string_view s)
 {
@@ -89,6 +104,7 @@ Scenario parseScenario(std::string_view s)
     if (s == "layer")    return Scenario::Layer;
     if (s == "lake")     return Scenario::Lake;
     if (s == "dambreak") return Scenario::DamBreak;
+    if (s == "river")    return Scenario::River;
     throw std::invalid_argument("nepoznat scenario: " + std::string(s));
 }
 
@@ -114,6 +130,13 @@ int main(int argc, char** argv)
     std::string waterOutPath   = "water.pgm";
     std::string diffOutPath;
     std::string sedimentOutPath;
+    std::string soilOutPath;
+    std::string bedrockPath;
+    RiverSettings river;
+    const float kUnset     = std::numeric_limits<float>::quiet_NaN();
+    float       soilDepth  = kUnset;
+    float       rockLevel  = kUnset;
+    bool        noBedrock  = false;
     std::string csvPath;
     std::string csvTag = "seq";
     std::string snapshotPrefix = "water";
@@ -157,6 +180,12 @@ int main(int argc, char** argv)
                 s.rate   = std::stof(next());
                 sources.push_back(s);
             }
+            else if (arg == "--soil-depth")      { soilDepth = std::stof(next()); }
+            else if (arg == "--rock-level")      { rockLevel = std::stof(next()); }
+            else if (arg == "--bedrock")         { bedrockPath = next(); }
+            else if (arg == "--no-bedrock")      { noBedrock = true; }
+            else if (arg == "--rock-erodibility") { params.rockErodibility = std::stof(next()); }
+            else if (arg == "--river-rate")      { river.sourceRate = std::stof(next()); }
             else if (arg == "--no-erosion")      { params.erosionEnabled   = false; }
             else if (arg == "--kc")              { params.sedimentCapacity = std::stof(next()); }
             else if (arg == "--ks")              { params.dissolvingRate   = std::stof(next()); }
@@ -172,6 +201,7 @@ int main(int argc, char** argv)
             else if (arg == "--water-out")       { waterOutPath = next(); }
             else if (arg == "--diff-out")        { diffOutPath = next(); }
             else if (arg == "--sediment-out")    { sedimentOutPath = next(); }
+            else if (arg == "--soil-out")        { soilOutPath = next(); }
             else if (arg == "--snapshot-every")  { snapshotEvery = std::stoi(next()); }
             else if (arg == "--snapshot-prefix") { snapshotPrefix = next(); }
             else if (arg == "--8bit")            { bits16 = false; }
@@ -192,7 +222,7 @@ int main(int argc, char** argv)
             setTerrainFromNormalized(grid, hm.values.data(), world.heightScale);
         } else {
             grid.resize(width, height, world.cellSize);
-            if (scenario != Scenario::DamBreak)
+            if (scenario != Scenario::DamBreak && scenario != Scenario::River)
                 generateFbmTerrain(grid, fbmSettings, world.heightScale);
         }
 
@@ -201,7 +231,31 @@ int main(int argc, char** argv)
         case Scenario::Layer:    fillConstant(grid.d, depth); break;
         case Scenario::Lake:     fillToLevel(grid, level >= 0.0f ? level : 0.5f * world.heightScale); break;
         case Scenario::DamBreak: setupDamBreak(grid, depth, 3.0f * depth, std::max(1, std::min(grid.width, grid.height) / 8)); break;
+        case Scenario::River:
+            // Teren, stijena (korito) i izvor dolaze iz scenarija.
+            if (!std::isnan(soilDepth))
+                river.soilDepth = soilDepth;
+            sources.push_back(setupRiverValley(grid, river));
+            break;
         }
+
+        // ── Stijena ──────────────────────────────────────────────────────────
+        if (scenario != Scenario::River && !std::isnan(soilDepth))
+            setBedrockUniformSoil(grid, soilDepth);
+        if (!std::isnan(rockLevel))
+            setBedrockLevel(grid, rockLevel);
+        if (!bedrockPath.empty()) {
+            const Heightmap hm = readPGM(bedrockPath);
+            if (hm.width != grid.width || hm.height != grid.height)
+                throw std::invalid_argument("--bedrock: dimenzije mape ne odgovaraju mreži");
+            std::vector<float> heights(hm.values.size());
+            for (std::size_t i = 0; i < heights.size(); ++i)
+                heights[i] = hm.values[i] * world.heightScale;
+            setBedrockHeights(grid, heights.data());
+        }
+        if (noBedrock)
+            clearBedrock(grid);
+        const BedrockStats rock0 = bedrockStats(grid);
 
         const double water0    = totalWater(grid);
         const double material0 = totalMaterial(grid);
@@ -296,6 +350,18 @@ int main(int argc, char** argv)
             std::printf("  (relativna promjena %.2e)", (material1 - material0) / material0);
         std::printf("\n");
 
+        if (rock0.rockCells > 0) {
+            const BedrockStats rock1 = bedrockStats(g);
+            const double       cells = static_cast<double>(g.cellCount());
+            std::printf("Stijena:        zadana u %.1f %% ćelija, tvrdoća %.3f\n",
+                        100.0 * static_cast<double>(rock0.rockCells) / cells,
+                        static_cast<double>(params.rockErodibility));
+            std::printf("  gola stijena  %.2f %% -> %.2f %% ćelija\n",
+                        100.0 * static_cast<double>(rock0.bareCells) / cells,
+                        100.0 * static_cast<double>(rock1.bareCells) / cells);
+            std::printf("  tlo           %.4e -> %.4e (zapremina)\n", rock0.soilVolume, rock1.soilVolume);
+        }
+
         // Erozija: koliko je terena odneseno, a koliko nataloženo.
         Field  diff(g.cellCount());
         double eroded = 0.0, deposited = 0.0;
@@ -328,6 +394,23 @@ int main(int argc, char** argv)
             if (!writePGM(diffOutPath, diff.data(), g.width, g.height, -r, r, bits16))
                 throw std::runtime_error("ne mogu upisati " + diffOutPath);
             std::printf(", %s", diffOutPath.c_str());
+        }
+        if (!soilOutPath.empty()) {
+            // Debljina tla b - r; bez stijene je neograničena, pa se prikazuje kao najveća.
+            Field soil(g.cellCount(), 0.0f);
+            float maxSoil = 0.0f;
+            for (std::size_t i = 0; i < g.cellCount(); ++i)
+                if (g.r[i] != kNoBedrock) {
+                    soil[i] = std::max(0.0f, g.b[i] - g.r[i]);
+                    maxSoil = std::max(maxSoil, soil[i]);
+                }
+            for (std::size_t i = 0; i < g.cellCount(); ++i)
+                if (g.r[i] == kNoBedrock)
+                    soil[i] = maxSoil;
+            if (!writePGM(soilOutPath, soil.data(), g.width, g.height, 0.0f,
+                          maxSoil > 0.0f ? maxSoil : 1.0f, bits16))
+                throw std::runtime_error("ne mogu upisati " + soilOutPath);
+            std::printf(", %s", soilOutPath.c_str());
         }
         if (!sedimentOutPath.empty()) {
             if (!writePGM(sedimentOutPath, g.s.data(), g.width, g.height, bits16))

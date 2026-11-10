@@ -97,7 +97,8 @@ if(PRS_BUILD_TESTS)
                                  tests/test_step5_transport.cpp
                                  tests/test_step6_evaporation.cpp
                                  tests/test_golden.cpp
-                                 tests/test_bedrock.cpp)
+                                 tests/test_bedrock.cpp
+                                 tests/test_river.cpp)
     target_link_libraries(erosion_tests PRIVATE erosion)
     if(PRS_BUILD_DLL)
         # C API testovi idu kroz pravi DLL (ne kroz statičku biblioteku).

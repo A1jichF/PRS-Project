@@ -70,6 +70,14 @@ build/erosion_cli --size 256 --rain 0.02 --steps 5000 --diff-out diff.pgm --sedi
 # ista simulacija bez erozije, ili s drugim konstantama
 build/erosion_cli --size 256 --rain 0.02 --steps 5000 --no-erosion
 build/erosion_cli --size 256 --rain 0.02 --steps 5000 --kc 0.3 --ks 0.3 --kd 1 --kdmax 0.5
+
+# stijena: 0.5 tla svuda iznad stijene; kiša spere tlo s padina u doline
+# (soil.pgm: crno = gola stijena)
+build/erosion_cli --size 256 --rain 0.02 --steps 3000 --soil-depth 0.5 --soil-out soil.pgm --diff-out diff.pgm
+
+# rijeka u koritu od stijene, pa ista rijeka bez stijene (korito se usijeca)
+build/erosion_cli --scenario river --steps 10000 --diff-out diff.pgm
+build/erosion_cli --scenario river --steps 10000 --diff-out diff.pgm --no-bedrock
 ```
 
 Na Windowsu s MSYS2 (UCRT64) GCC-om programi se linkuju statički (`-static`), pa rade i kad MSYS2 nije na PATH-u.
@@ -162,7 +170,7 @@ Detalji (DLL, kontrole, šta se dešava u svakom frameu): [docs/erosion.md u for
 | [include/erosion/Diagnostics.h](include/erosion/Diagnostics.h) | Ukupna masa vode i materijala, min/max, poređenje polja, CFL. |
 | [include/erosion/Kernels.h](include/erosion/Kernels.h) | Kerneli po fazama (`seq::addWater`, `seq::computeFlux`, `seq::updateWaterAndVelocity`). |
 | [include/erosion/Simulation.h](include/erosion/Simulation.h) | Poziva kernele redom i mjeri vrijeme po fazi. |
-| [include/erosion/Scenarios.h](include/erosion/Scenarios.h) | Početna stanja: mirno jezero, punjenje do nivoa, dam-break. |
+| [include/erosion/Scenarios.h](include/erosion/Scenarios.h) | Početna stanja: mirno jezero, punjenje do nivoa, dam-break, rijeka u koritu od stijene. |
 | [include/prs_erosion.h](include/prs_erosion.h) | C interfejs za DLL (`prs_erosion.dll`), koji koristi engine. |
 | [apps/erosion_cli/](apps/erosion_cli/) | Komandna linija: generisanje i učitavanje terena (kasnije i simulacija). |
 | [tests/](tests/) | Testovi bez vanjskih zavisnosti. |
@@ -219,6 +227,15 @@ nema dovoljno tla:     iz stijene se uzima (Δ − (b − r)) · rockErodibility
 - Dok stijena nije zadana (`r = kNoBedrock`), rezultati su bit-identični verziji bez stijene; to provjerava [tests/test_golden.cpp](tests/test_golden.cpp).
 
 Stijena se zadaje funkcijama iz [Bedrock.h](include/erosion/Bedrock.h), poslije terena: `setBedrockUniformSoil` (isti sloj tla svuda), `setBedrockFromSoilDepth` (debljina tla po ćeliji), `setBedrockLevel` (stijena do zadane visine) i `setBedrockHeights` (proizvoljna mapa). Sve garantuju `r ≤ b`.
+
+**Scenarij „rijeka"** (`setupRiverValley`, u CLI-ju `--scenario river`): dolina koja pada prema dnu mreže, s vijugavim koritom čije su dno i obale gola stijena, izvorom na vrhu i bazenom na dnu. Rubovi mreže su zatvoreni, pa se voda skuplja u bazenu u jezero; nivo se ustali kad isparavanje izjednači dotok (zapremina ≈ dotok / `Ke`). Na 256², nakon 10 000 koraka:
+
+| | Najdublja erozija | Odneseno (zapremina) |
+|---|---|---|
+| korito od stijene | 0 u koritu; izvan njega do −1,5 (cijeli sloj tla) | 1,1·10³ |
+| bez stijene (`--no-bedrock`) | **−11,8** | 1,1·10⁴ |
+
+Sa stijenom se korito ne mijenja. Tlo je odneseno do stijene samo na dva mjesta izvan korita: uz vanjsku obalu jedne krivine, gdje se voda prelijeva, i na ušću, odakle se taloži u jezeru. Bez stijene se ista rijeka usijeca duž cijelog toka.
 
 Ćelija čita i piše samo vlastito `r`, pa kernel erozije nema novih zavisnosti između ćelija (važno za OpenMP/SIMD).
 
