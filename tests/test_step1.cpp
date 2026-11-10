@@ -12,6 +12,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <filesystem>
+#include <iterator>
 #include <stdexcept>
 #include <string>
 
@@ -34,12 +35,16 @@ TEST(grid_alocira_sva_polja_na_nulu)
         CHECK(f->size() == g.cellCount());
         CHECK(fieldSum(*f) == 0.0);
     }
+    // Stijena: zadano je "nema stijene" u svakoj ćeliji.
+    CHECK(g.r.size() == g.cellCount());
+    CHECK(fieldRange(g.r).min == kNoBedrock);
+    CHECK(fieldRange(g.r).max == kNoBedrock);
 }
 
 TEST(grid_polja_su_poravnata_na_64_bajta)
 {
     Grid g(100, 3, 1.0f);
-    for (const Field* f : {&g.b, &g.d, &g.s, &g.fL, &g.fR, &g.fT, &g.fB, &g.u, &g.v})
+    for (const Field* f : {&g.b, &g.d, &g.s, &g.fL, &g.fR, &g.fT, &g.fB, &g.u, &g.v, &g.r})
         CHECK(reinterpret_cast<std::uintptr_t>(f->data()) % 64 == 0);
 }
 
@@ -48,9 +53,10 @@ TEST(grid_polja_su_na_razlicitim_pomacima_u_stranici)
     // Zaštita od "4K aliasinga" (vidi AlignedAllocator): nijedna dva polja
     // iste mreže ne smiju početi na istom pomaku unutar 4 KB stranice.
     Grid g(256, 256, 2.0f);
-    const Field* fields[] = {&g.b, &g.d, &g.s, &g.fL, &g.fR, &g.fT, &g.fB, &g.u, &g.v};
-    for (std::size_t a = 0; a < 9; ++a)
-        for (std::size_t b = a + 1; b < 9; ++b) {
+    const Field* fields[] = {&g.b, &g.d, &g.s, &g.fL, &g.fR, &g.fT, &g.fB, &g.u, &g.v, &g.r};
+    const std::size_t n = std::size(fields);
+    for (std::size_t a = 0; a < n; ++a)
+        for (std::size_t b = a + 1; b < n; ++b) {
             const auto pa = reinterpret_cast<std::uintptr_t>(fields[a]->data()) % 4096;
             const auto pb = reinterpret_cast<std::uintptr_t>(fields[b]->data()) % 4096;
             CHECK(pa != pb);
@@ -58,8 +64,8 @@ TEST(grid_polja_su_na_razlicitim_pomacima_u_stranici)
 
     // I nakon ponovnog resize-a (npr. druga veličina) raspored je isti.
     g.resize(100, 50, 1.0f);
-    for (std::size_t a = 0; a < 9; ++a)
-        for (std::size_t b = a + 1; b < 9; ++b)
+    for (std::size_t a = 0; a < n; ++a)
+        for (std::size_t b = a + 1; b < n; ++b)
             CHECK(reinterpret_cast<std::uintptr_t>(fields[a]->data()) % 4096 !=
                   reinterpret_cast<std::uintptr_t>(fields[b]->data()) % 4096);
 }

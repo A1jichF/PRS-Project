@@ -105,7 +105,7 @@ Prvo mjerenje je imalo rasipanje do **68 %**, i to samo u fazi "voda + brzina". 
 
 Uzrok: sva polja mreže su iste veličine i alocirana jedno za drugim, pa su počinjala na **istom pomaku unutar 4 KB stranice** (`u ≡ fR`, `v ≡ fT`, `fL ≡ fB` po modulu 4096). Petlja upiše `u[i]`, pa u sljedećoj iteraciji čita `fR[i]`. Procesor upoređuje samo nižih 12 bitova adrese, pogrešno zaključi da čitanje zavisi od upisa i čeka. Četiri nivoa brzine (`0,16 + k · 0,22` ms) odgovaraju broju pogođenih izlaznih nizova (`d`, `u`, `v`).
 
-Popravka je u [AlignedAllocator.h](include/erosion/AlignedAllocator.h): svako polje dobija vlastiti pomak unutar stranice (korak 256 B; polja mreže slotovi 0–8, pomoćni baferi simulacije 9–11). Ovo je važno i za OpenMP/SIMD mjerenja, jer bi inače nasumično usporavanje izgledalo kao loše skaliranje. Na bateriji je isti kod bio oko 2× sporiji, a vremena su skakala i do 60% između pokretanja.
+Popravka je u [AlignedAllocator.h](include/erosion/AlignedAllocator.h): svako polje dobija vlastiti pomak unutar stranice (korak 256 B; polja mreže slotovi 0–9, pomoćni baferi simulacije 10–12). Ovo je važno i za OpenMP/SIMD mjerenja, jer bi inače nasumično usporavanje izgledalo kao loše skaliranje. Na bateriji je isti kod bio oko 2× sporiji, a vremena su skakala i do 60% između pokretanja.
 
 ### DLL za engine (`prs_erosion.dll`)
 

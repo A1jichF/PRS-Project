@@ -25,9 +25,9 @@ Simulation::Simulation(Grid grid, Params params)
 
 void Simulation::allocateScratch()
 {
-    // Pomoćni baferi u slotovima 9–11, različitim od polja mreže (0–8),
+    // Pomoćni baferi u slotovima 10–12, različitim od polja mreže (0–9),
     // da se ne poklope s nizovima uz koje se koriste (vidi AlignedAllocator).
-    StaggerScope stagger(9);
+    StaggerScope stagger(10);
     for (Field* f : {&m_bScratch, &m_sScratch, &m_rateScratch}) {
         Field().swap(*f);
         f->assign(m_grid.cellCount(), 0.0f);

@@ -24,7 +24,7 @@ inline std::size_t nextStaggerOffset()
 } // namespace detail
 
 /// Određuje od kojeg slota počinju alokacije polja u ovom opsegu.
-/// Grid::resize koristi slotove 0–8, Simulation za pomoćne bafere 9–11, pa
+/// Grid::resize koristi slotove 0–9, Simulation za pomoćne bafere 10–12, pa
 /// nijedna dva niza koja se koriste u istom kernelu nisu na istom pomaku.
 class StaggerScope {
 public:

@@ -21,20 +21,24 @@ void Grid::resize(int w, int h, float cell)
     height   = h;
     cellSize = cell;
 
-    // Svako polje na svom pomaku unutar stranice (slotovi 0–8), vidi AlignedAllocator.
+    // Svako polje na svom pomaku unutar stranice (slotovi 0–9), vidi AlignedAllocator.
     // Stara polja se prvo oslobode, da assign zaista alocira novu memoriju.
+    // r je zadnje, da ostala polja zadrže pomake koje su imala prije uvođenja stijene.
     const std::size_t n = cellCount();
     StaggerScope      stagger(0);
     for (Field* f : {&b, &d, &s, &fL, &fR, &fT, &fB, &u, &v}) {
         Field().swap(*f);
         f->assign(n, 0.0f);
     }
+    Field().swap(r);
+    r.assign(n, kNoBedrock);
 }
 
 void Grid::clear()
 {
     for (Field* f : {&b, &d, &s, &fL, &fR, &fT, &fB, &u, &v})
         std::fill(f->begin(), f->end(), 0.0f);
+    std::fill(r.begin(), r.end(), kNoBedrock);
 }
 
 } // namespace erosion

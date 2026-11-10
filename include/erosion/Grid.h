@@ -3,8 +3,15 @@
 #include "erosion/AlignedAllocator.h"
 
 #include <cstddef>
+#include <limits>
 
 namespace erosion {
+
+/// Vrijednost polja Grid::r koja znači "ovdje nema stijene": najmanji konačni
+/// float, pa je debljina tla b - r praktično neograničena i erozija se ponaša
+/// kao da stijena ne postoji. Namjerno nije -inf, da polje ostane konačno
+/// (allFinite, a kasnije i SIMD s -ffinite-math-only).
+inline constexpr float kNoBedrock = std::numeric_limits<float>::lowest();
 
 /// Stanje simulacije na mreži width × height ćelija, u SoA rasporedu.
 ///
@@ -35,13 +42,19 @@ struct Grid {
     Field u;  ///< Brzina vode po x
     Field v;  ///< Brzina vode po y
 
+    /// Visina vrha stijene (bedrock). Između r i b je sloj tla debljine b - r,
+    /// koji voda može odnijeti; stijenu ne može (ili može sporije, zavisno od
+    /// tvrdoće). Gdje je r == b, stijena je gola. Zadano kNoBedrock: nema stijene.
+    Field r;
+
     Grid() = default;
     Grid(int width, int height, float cellSize);
 
-    /// Alocira sva polja na width × height i postavlja ih na nulu.
+    /// Alocira sva polja na width × height i postavlja ih na nulu
+    /// (stijenu r na kNoBedrock).
     void resize(int width, int height, float cellSize);
 
-    /// Postavlja sva polja na nulu (dimenzije ostaju iste).
+    /// Postavlja sva polja na nulu, a stijenu r na kNoBedrock (dimenzije ostaju iste).
     void clear();
 
     [[nodiscard]] std::size_t cellCount() const
