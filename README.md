@@ -157,6 +157,8 @@ cd build\test-app
 - `C:\msys64\ucrt64\bin` mora biti na PATH-u, kao za build ovog projekta.
 - U aplikaciji je scena **zadnja u listi** (tipka **6** bez Bistro asseta, inače **7**; tačan broj ispiše se u konzoli: `Press N for Erosion (PRS)`). Kamera se pomjera s WASD i mišem, a **TAB** oslobađa miš za UI. Kontrole simulacije su u lijevom panelu, tab **"Terr"**.
 
+- Stijena se podešava u sekciji **Bedrock** istog taba: gdje je stijena (nigdje, ispod jednakog sloja tla, ili prema maski stijene iz generatora enginea), debljina tla i tvrdoća. Dugme **River scenario** prebacuje na dolinu s koritom od stijene. Gola stijena je u prikazu siva.
+
 Detalji (DLL, kontrole, šta se dešava u svakom frameu): [docs/erosion.md u forku](https://github.com/KerimSikalo/opengl-forward-renderer/blob/feature/erosion-scene/docs/erosion.md).
 
 ### Struktura koda
