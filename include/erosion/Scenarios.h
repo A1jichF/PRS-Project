@@ -35,6 +35,7 @@ struct RiverSettings {
     float basinFraction    = 0.22f; ///< Donji dio mreže (udio visine) je bazen bez korita
     float soilDepth        = 1.5f;  ///< Debljina tla izvan korita (u koritu je gola stijena)
     float sourceRate       = 0.6f;  ///< Izvor: visina vode u sekundi po ćeliji izvora
+    float baseHeight       = 0.0f;  ///< Visina dna bazena (dodaje se cijelom terenu)
 };
 
 /// Scenarij "rijeka": dolina koja pada od y = 0 prema y = height - 1, s

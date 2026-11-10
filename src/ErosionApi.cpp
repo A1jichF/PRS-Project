@@ -7,9 +7,11 @@
 
 #include "prs_erosion.h"
 
+#include "erosion/Bedrock.h"
 #include "erosion/Diagnostics.h"
 #include "erosion/Grid.h"
 #include "erosion/Params.h"
+#include "erosion/Scenarios.h"
 #include "erosion/Simulation.h"
 
 #include <algorithm>
@@ -49,6 +51,7 @@ PrsErosionParams toC(const erosion::Params& p)
     c.sedimentTransport   = p.sedimentTransport == erosion::SedimentTransport::Flux
                                 ? PRS_TRANSPORT_FLUX
                                 : PRS_TRANSPORT_SEMI_LAGRANGIAN;
+    c.rockErodibility     = p.rockErodibility;
     return c;
 }
 
@@ -64,7 +67,7 @@ bool fromC(const PrsErosionParams& c, erosion::Params& out)
     const float nonNegative[] = {c.gravity, c.pipeArea, c.rainRate, c.evaporationRate,
                                  c.minDepthForVelocity, c.sedimentCapacity,
                                  c.dissolvingRate, c.depositionRate, c.minTilt,
-                                 c.maxErosionDepth};
+                                 c.maxErosionDepth, c.rockErodibility};
     for (float v : nonNegative) {
         if (!finite(v) || v < 0.0f) {
             setError("parametri moraju biti konačni i >= 0");
@@ -93,6 +96,7 @@ bool fromC(const PrsErosionParams& c, erosion::Params& out)
     p.sedimentTransport   = c.sedimentTransport == PRS_TRANSPORT_FLUX
                                 ? erosion::SedimentTransport::Flux
                                 : erosion::SedimentTransport::SemiLagrangian;
+    p.rockErodibility     = c.rockErodibility;
     out = p;
     return true;
 }
@@ -216,6 +220,88 @@ void prs_erosion_clear_sources(PrsErosion* sim)
         sim->sim->clearSources();
 }
 
+int prs_erosion_set_bedrock(PrsErosion* sim, const float* heights)
+{
+    clearError();
+    if (!sim) {
+        setError("NULL handle");
+        return 0;
+    }
+    if (heights)
+        erosion::setBedrockHeights(sim->sim->grid(), heights);
+    else
+        erosion::clearBedrock(sim->sim->grid());
+    return 1;
+}
+
+int prs_erosion_set_soil_depth(PrsErosion* sim, const float* soilDepth)
+{
+    clearError();
+    if (!sim || !soilDepth) {
+        setError("NULL argument");
+        return 0;
+    }
+    erosion::setBedrockFromSoilDepth(sim->sim->grid(), soilDepth);
+    return 1;
+}
+
+int prs_erosion_set_uniform_soil(PrsErosion* sim, float soilDepth)
+{
+    clearError();
+    if (!sim) {
+        setError("NULL handle");
+        return 0;
+    }
+    erosion::setBedrockUniformSoil(sim->sim->grid(), soilDepth);
+    return 1;
+}
+
+void prs_erosion_default_river_settings(PrsRiverSettings* out)
+{
+    if (!out)
+        return;
+    const erosion::RiverSettings d;
+    out->soilDepth  = d.soilDepth;
+    out->sourceRate = d.sourceRate;
+    out->baseHeight = d.baseHeight;
+}
+
+int prs_erosion_setup_river(PrsErosion* sim, const PrsRiverSettings* settings)
+{
+    clearError();
+    if (!sim) {
+        setError("NULL handle");
+        return 0;
+    }
+    erosion::RiverSettings river;
+    if (settings) {
+        if (!std::isfinite(settings->soilDepth) || settings->soilDepth < 0.0f ||
+            !std::isfinite(settings->sourceRate) || settings->sourceRate < 0.0f ||
+            !std::isfinite(settings->baseHeight)) {
+            setError("neispravne postavke rijeke");
+            return 0;
+        }
+        river.soilDepth  = settings->soilDepth;
+        river.sourceRate = settings->sourceRate;
+        river.baseHeight = settings->baseHeight;
+    }
+    try {
+        const erosion::Grid& old = sim->sim->grid();
+        erosion::Grid        g(old.width, old.height, old.cellSize);
+        const erosion::WaterSource source = erosion::setupRiverValley(g, river);
+        auto fresh = std::make_unique<erosion::Simulation>(std::move(g), sim->sim->params());
+        fresh->addSource(source);
+        sim->sim        = std::move(fresh);
+        sim->lastStepMs = 0.0;
+        return 1;
+    } catch (const std::exception& e) {
+        setError(std::string("prs_erosion_setup_river: ") + e.what());
+    } catch (...) {
+        setError("prs_erosion_setup_river: nepoznata greška");
+    }
+    return 0;
+}
+
 void prs_erosion_step(PrsErosion* sim, int steps)
 {
     if (!sim || steps <= 0)
@@ -235,6 +321,7 @@ const float* prs_erosion_water(const PrsErosion* sim) { return sim ? sim->sim->g
 const float* prs_erosion_sediment(const PrsErosion* sim) { return sim ? sim->sim->grid().s.data() : nullptr; }
 const float* prs_erosion_velocity_x(const PrsErosion* sim) { return sim ? sim->sim->grid().u.data() : nullptr; }
 const float* prs_erosion_velocity_y(const PrsErosion* sim) { return sim ? sim->sim->grid().v.data() : nullptr; }
+const float* prs_erosion_bedrock(const PrsErosion* sim) { return sim ? sim->sim->grid().r.data() : nullptr; }
 
 void prs_erosion_get_stats(const PrsErosion* sim, PrsErosionStats* out)
 {
@@ -249,6 +336,11 @@ void prs_erosion_get_stats(const PrsErosion* sim, PrsErosionStats* out)
     out->lastStepMs    = sim->lastStepMs;
     out->totalWater    = erosion::totalWater(g);
     out->totalMaterial = erosion::totalMaterial(g);
+
+    const erosion::BedrockStats rock = erosion::bedrockStats(g, 0.01f);
+    out->rockCells     = static_cast<long long>(rock.rockCells);
+    out->bareRockCells = static_cast<long long>(rock.bareCells);
+    out->soilVolume    = rock.soilVolume;
 }
 
 } // extern "C"

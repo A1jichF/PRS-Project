@@ -120,6 +120,7 @@ Popravka je u [AlignedAllocator.h](include/erosion/AlignedAllocator.h): svako po
 Engine ne sadrži naš izvorni kod, nego samo gotov DLL s C interfejsom, kako bi asistent kasnije mogao spojiti projekte više timova bez konflikata. U engineu nije izmijenjen nijedan fajl jezgra (`src/`): dodana je samo scena, a DLL je u folderu `external/prs-erosion`.
 
 - **Interfejs:** [include/prs_erosion.h](include/prs_erosion.h) je čisti C (neprozirni `PrsErosion*` handle i `float` nizovi), pa DLL ne zavisi od kompajlera kojim se gradi engine. Wrapper je u [src/ErosionApi.cpp](src/ErosionApi.cpp).
+- **Verzija API-ja 2:** uz simulaciju, DLL izlaže stijenu (`prs_erosion_set_bedrock`, `prs_erosion_set_soil_depth`, `prs_erosion_set_uniform_soil`, `prs_erosion_bedrock`), tvrdoću (`rockErodibility` u parametrima) i scenarij rijeke (`prs_erosion_setup_river`). Program provjerava `prs_erosion_api_version()`, pa stari DLL i novi header ne mogu tiho raditi zajedno.
 - **Sadržaj:** DLL je ista statička biblioteka `erosion` s tankim omotačem. Test `capi_dll_bit_identican_statickoj_biblioteci` provjerava da su rezultati kroz DLL bit-identični. C++ runtime je statički linkovan, pa DLL zavisi samo od sistemskih DLL-ova Windowsa.
 - **Pravljenje paketa za engine** (`include/`, `bin/prs_erosion.dll`, `lib/`):
 

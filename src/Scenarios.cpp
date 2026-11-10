@@ -117,8 +117,9 @@ WaterSource setupRiverValley(Grid& g, const RiverSettings& settings)
     for (int y = 0; y < g.height; ++y) {
         const float fy    = static_cast<float>(y);
         const float fade  = geo.channelFade(fy);
-        // Dno korita pada nizvodno do bazena, a bazen je na visini 0.
-        const float along = settings.slope * l * std::max(0.0f, geo.basinRow - fy);
+        // Dno korita pada nizvodno do bazena, a bazen je na visini baseHeight.
+        const float along = settings.baseHeight +
+                            settings.slope * l * std::max(0.0f, geo.basinRow - fy);
         // Strane bazena su blaže od strana doline, da se voda razlije u jezero.
         const float sideScale = 0.3f + 0.7f * fade;
 
