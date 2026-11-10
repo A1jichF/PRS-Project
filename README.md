@@ -107,6 +107,21 @@ Uzrok: sva polja mreže su iste veličine i alocirana jedno za drugim, pa su po�
 
 Popravka je u [AlignedAllocator.h](include/erosion/AlignedAllocator.h): svako polje dobija vlastiti pomak unutar stranice (korak 256 B; polja mreže slotovi 0–8, pomoćni baferi simulacije 9–11). Ovo je važno i za OpenMP/SIMD mjerenja, jer bi inače nasumično usporavanje izgledalo kao loše skaliranje. Na bateriji je isti kod bio oko 2× sporiji, a vremena su skakala i do 60% između pokretanja.
 
+### DLL za engine (`prs_erosion.dll`)
+
+Engine ne sadrži naš izvorni kod, nego samo gotov DLL s C interfejsom, kako bi asistent kasnije mogao spojiti projekte više timova bez konflikata. U engineu nije izmijenjen nijedan fajl jezgra (`src/`): dodana je samo scena, a DLL je u folderu `external/prs-erosion`.
+
+- **Interfejs:** [include/prs_erosion.h](include/prs_erosion.h) je čisti C (neprozirni `PrsErosion*` handle i `float` nizovi), pa DLL ne zavisi od kompajlera kojim se gradi engine. Wrapper je u [src/ErosionApi.cpp](src/ErosionApi.cpp).
+- **Sadržaj:** DLL je ista statička biblioteka `erosion` s tankim omotačem. Test `capi_dll_bit_identican_statickoj_biblioteci` provjerava da su rezultati kroz DLL bit-identični. C++ runtime je statički linkovan, pa DLL zavisi samo od sistemskih DLL-ova Windowsa.
+- **Pravljenje paketa za engine** (`include/`, `bin/prs_erosion.dll`, `lib/`):
+
+```powershell
+cmake --build build
+cmake --install build --prefix ..\opengl-forward-renderer\external\prs-erosion
+```
+
+  Nakon toga se u forku commitaju promijenjeni fajlovi (`build(erosion): update prs_erosion DLL`).
+
 ### 3D prikaz u opengl-forward-renderer
 
 Simulacija se može gledati uživo u 3D, u forku engina [KerimSikalo/opengl-forward-renderer](https://github.com/KerimSikalo/opengl-forward-renderer/tree/feature/erosion-scene) (grana `feature/erosion-scene`, scena **"Erosion (PRS)"**). Fork treba biti kloniran **pored** ovog foldera:
@@ -120,19 +135,20 @@ Repozitorij\
 Pokretanje iz foldera `PRS-Project` (PowerShell):
 
 ```powershell
+cmake --install build --prefix ..\opengl-forward-renderer\external\prs-erosion   # samo ako je simulacija mijenjana
 cd ..\opengl-forward-renderer
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DPRS_EROSION_DIR=../PRS-Project
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build --parallel
 cd build\test-app
 .\TestApp.exe
 ```
 
-- `-DPRS_EROSION_DIR=../PRS-Project` znači da engine koristi **ovaj lokalni folder**, pa se svaka izmjena simulacije vidi odmah nakon `cmake --build`, bez commita. Bez ove opcije engine koristi submodul `external/prs-erosion`, tj. verziju PRS-Projecta fiksiranu u forku.
-- Prvi build traje 3–4 minute (preuzimaju se i kompajliraju assimp, glfw, imgui...), a kasniji su brzi. Nakon prvog puta dovoljna su zadnja tri reda.
+- Engine koristi DLL iz `external/prs-erosion`, a build ga kopira pored `TestApp.exe`. Izmjena simulacije se zato vidi tek nakon `cmake --install` (prvi red) i ponovnog `cmake --build` u engineu.
+- Prvi build traje 3–4 minute (preuzimaju se i kompajliraju assimp, glfw, imgui...), a kasniji su brzi.
 - `C:\msys64\ucrt64\bin` mora biti na PATH-u, kao za build ovog projekta.
-- U aplikaciji: scena je na tipki **1**, kamera se pomjera s WASD i mišem, a **TAB** oslobađa miš za UI. Kontrole simulacije su u lijevom panelu, tab **"Terr"**.
+- U aplikaciji je scena **zadnja u listi** (tipka **6** bez Bistro asseta, inače **7**; tačan broj ispiše se u konzoli: `Press N for Erosion (PRS)`). Kamera se pomjera s WASD i mišem, a **TAB** oslobađa miš za UI. Kontrole simulacije su u lijevom panelu, tab **"Terr"**.
 
-Detalji (submodul, kontrole, šta se dešava u svakom frameu): [docs/erosion.md u forku](https://github.com/KerimSikalo/opengl-forward-renderer/blob/feature/erosion-scene/docs/erosion.md).
+Detalji (DLL, kontrole, šta se dešava u svakom frameu): [docs/erosion.md u forku](https://github.com/KerimSikalo/opengl-forward-renderer/blob/feature/erosion-scene/docs/erosion.md).
 
 ### Struktura koda
 
@@ -146,6 +162,7 @@ Detalji (submodul, kontrole, šta se dešava u svakom frameu): [docs/erosion.md 
 | [include/erosion/Kernels.h](include/erosion/Kernels.h) | Kerneli po fazama (`seq::addWater`, `seq::computeFlux`, `seq::updateWaterAndVelocity`). |
 | [include/erosion/Simulation.h](include/erosion/Simulation.h) | Poziva kernele redom i mjeri vrijeme po fazi. |
 | [include/erosion/Scenarios.h](include/erosion/Scenarios.h) | Početna stanja: mirno jezero, punjenje do nivoa, dam-break. |
+| [include/prs_erosion.h](include/prs_erosion.h) | C interfejs za DLL (`prs_erosion.dll`), koji koristi engine. |
 | [apps/erosion_cli/](apps/erosion_cli/) | Komandna linija: generisanje i učitavanje terena (kasnije i simulacija). |
 | [tests/](tests/) | Testovi bez vanjskih zavisnosti. |
 | [bench/](bench/) | Skripte za mjerenje i rezultati (`bench/results/*.csv`). |

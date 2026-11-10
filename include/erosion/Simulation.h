@@ -49,6 +49,7 @@ public:
 
     void addSource(const WaterSource& source) { m_sources.push_back(source); }
     void clearSources() { m_sources.clear(); }
+    [[nodiscard]] const std::vector<WaterSource>& sources() const { return m_sources; }
 
     [[nodiscard]] Grid&                     grid() { return m_grid; }
     [[nodiscard]] const Grid&               grid() const { return m_grid; }
